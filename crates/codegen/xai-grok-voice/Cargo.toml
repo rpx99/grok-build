@@ -45,7 +45,7 @@ audio = ["dep:cpal"]
 # cpal is only used by the non-Linux capture backend. Gating it to non-Linux
 # keeps `alsa-sys` (a NEEDED `libasound.so.2`) out of the static musl build; on
 # Linux the `audio` feature compiles the subprocess recorder backend instead.
-[target.'cfg(not(target_os = "linux"))'.dependencies.cpal]
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies.cpal]
 version = "0.15"
 optional = true
 

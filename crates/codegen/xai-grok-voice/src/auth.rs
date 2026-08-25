@@ -13,7 +13,7 @@ use std::future::{Future, ready};
 use std::pin::Pin;
 use std::sync::Arc;
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use crate::error::VoiceError;
 
 pub trait VoiceAuthProvider: std::fmt::Debug + Send + Sync + 'static {
@@ -23,7 +23,7 @@ pub trait VoiceAuthProvider: std::fmt::Debug + Send + Sync + 'static {
 /// Shared provider handed to the voice pipeline.
 pub type SharedVoiceAuth = Arc<dyn VoiceAuthProvider>;
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub(crate) async fn require_bearer(auth: &SharedVoiceAuth) -> Result<String, VoiceError> {
     auth.bearer().await.ok_or_else(|| {
         VoiceError::Auth(

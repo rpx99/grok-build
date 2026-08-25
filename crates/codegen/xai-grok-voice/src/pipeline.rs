@@ -5,7 +5,7 @@
 //! the `Ptt*` names — so a press may be followed by a release after a long hold
 //! or, for a toggle, a later stop.
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use std::collections::VecDeque;
 
 use tokio::sync::mpsc;
@@ -15,7 +15,7 @@ use crate::auth::SharedVoiceAuth;
 use crate::config::VoiceConfig;
 use crate::error::VoiceError;
 use crate::event::VoiceEvent;
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use crate::stt::{StreamingSttEvent, StreamingSttSession};
 
 /// Commands from the pager event loop (toggle start/stop, or F12 push-to-talk).
@@ -127,7 +127,7 @@ async fn open_session(
     }
 }
 
-#[cfg(not(feature = "audio"))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
 async fn start_capture_session(
     _config: &VoiceConfig,
     _auth: &SharedVoiceAuth,
@@ -141,7 +141,7 @@ async fn start_capture_session(
 /// Hard cap on the pre-connect PCM backlog (memory safety). Sized far above any
 /// real connect — the STT connect timeout aborts long before this is reached, so
 /// in practice it never drops; it only bounds a pathological hang.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 const BACKLOG_MAX_CHUNKS: usize = 1024;
 
 /// Bridge mic PCM into the STT socket across the connect handshake.
@@ -152,7 +152,7 @@ const BACKLOG_MAX_CHUNKS: usize = 1024;
 /// Holding the sender also defers the writer's `audio.done` until the backlog is
 /// drained on teardown. Returns when the mic stops (`mic_rx` closed), the socket
 /// goes away (`audio_tx` closed), or connect fails (`audio_tx_rx` dropped).
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 async fn forward_pcm(
     mut mic_rx: mpsc::Receiver<Vec<u8>>,
     mut audio_tx_rx: tokio::sync::oneshot::Receiver<mpsc::Sender<Vec<u8>>>,
@@ -194,13 +194,13 @@ async fn forward_pcm(
 /// How long a session may run without any transcript before it is torn down
 /// (instead of streaming a dead mic until the user gives up). Disarmed by the
 /// first transcript, so long dictation with pauses is unaffected.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 const NO_SPEECH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Message and permission guidance for a session torn down by
 /// [`NO_SPEECH_TIMEOUT`]. A denied grant is indistinguishable from not speaking
 /// because macOS may return silence instead of an error.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 fn no_speech_error() -> (String, Option<String>) {
     (
         "No speech was detected. Voice stopped.".to_owned(),
@@ -208,7 +208,7 @@ fn no_speech_error() -> (String, Option<String>) {
     )
 }
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 async fn start_capture_session(
     config: &VoiceConfig,
     auth: &SharedVoiceAuth,

@@ -1,0 +1,8 @@
+Grok Build is SpaceXAI's terminal-based AI coding agent: a fullscreen TUI
+that understands a codebase, edits files, runs shell commands, searches
+the web and manages long-running tasks - interactively, headlessly or
+embedded in editors via ACP.
+
+Native OpenBSD source build of github.com/xai-org/grok-build.
+Authenticate with "grok login" or set XAI_API_KEY. State lives under
+~/.grok/.

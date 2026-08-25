@@ -64,6 +64,12 @@ rustflags = ["-C", "force-unwind-tables=yes", "-C", "target-feature=+crt-static"
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "force-unwind-tables=yes", "-C", "target-feature=+crt-static"]
 
+# OpenBSD: RELRO + non-executable stack are already default in the base system,
+# and the OpenBSD linker does not support GNU -z flags. jemalloc is not used
+# (see xai-grok-pager-bin Cargo.toml gating), so no jemalloc env vars needed.
+[target.x86_64-unknown-openbsd]
+rustflags = ["-C", "force-unwind-tables=yes"]
+
 
 # jemalloc page size for Apple Silicon (macOS aarch64 uses 16KB pages = 2^14).
 # This target-prefixed env var is consumed by tikv-jemalloc-sys's build.rs

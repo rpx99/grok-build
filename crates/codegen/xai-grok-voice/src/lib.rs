@@ -7,7 +7,7 @@
 //! the long-lived TUI never pays the platform audio stack's permanent memory
 //! cost (see [`audio`] and [`maybe_run_capture_subprocess`]).
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub mod audio;
 pub mod auth;
 pub mod config;
@@ -27,7 +27,7 @@ pub use language::{
     language_for_api, stt_language_by_code,
 };
 pub use pipeline::{VoiceCommand, run_voice_pipeline};
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub use probe::run_mic_only_probe;
 pub use probe::{
     InputDeviceInfo, VoiceProbeOptions, VoiceProbeReport, format_probe_report, input_device_info,
@@ -62,7 +62,7 @@ pub fn maybe_run_capture_subprocess() -> Option<i32> {
     if !is_capture_subcommand(&argv) {
         return None;
     }
-    #[cfg(all(feature = "audio", not(target_os = "linux")))]
+    #[cfg(all(feature = "audio", any(target_os = "macos", target_os = "windows")))]
     {
         // Skip argv[0] (binary) and argv[1] (subcommand); the rest are flags.
         let args: Vec<String> = argv
@@ -72,7 +72,7 @@ pub fn maybe_run_capture_subprocess() -> Option<i32> {
             .collect();
         Some(audio::run_capture_child_cli(args))
     }
-    #[cfg(not(all(feature = "audio", not(target_os = "linux"))))]
+    #[cfg(any(not(feature = "audio"), not(any(target_os = "macos", target_os = "windows"))))]
     {
         // Never spawned by this build's own parent backend (Linux uses system
         // recorders; no-audio builds have no capture). Reachable only by hand.

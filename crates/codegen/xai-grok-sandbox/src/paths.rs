@@ -22,7 +22,7 @@ pub(crate) fn sandbox_events_log_path() -> PathBuf {
 ///
 /// These are individual files (use `allow_file`, not `allow_path`).
 /// Directory nodes under `/dev` belong in [`DEVICE_DIRS`].
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub(crate) const DEVICE_FILES: &[&str] = &[
     "/dev/null",    // output sink — used by virtually every CLI tool
     "/dev/zero",    // zero source — used by memory allocators
@@ -33,7 +33,7 @@ pub(crate) const DEVICE_FILES: &[&str] = &[
 ];
 
 /// Device directories that need write access (use `allow_path`, not `allow_file`).
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub(crate) const DEVICE_DIRS: &[&str] = &[
     "/dev/pts", // PTY slaves (Linux)
     "/dev/fd",  // fd table (symlink to /proc/self/fd on Linux; a directory)
@@ -72,6 +72,7 @@ pub(crate) fn temp_writable_paths() -> Vec<PathBuf> {
 // ── Essential writable paths ────────────────────────────────────────────────
 
 /// Writable directory paths for the workspace profile (full `grok_home()` and temp).
+/// Device files are handled separately via `allow_file` in `to_capability_set_with_config`.
 /// Device files are handled separately via `allow_file` in `to_capability_set_with_config`.
 pub(crate) fn essential_writable_paths(workspace: &Path) -> Vec<PathBuf> {
     let mut paths = vec![workspace.to_path_buf(), grok_home()];

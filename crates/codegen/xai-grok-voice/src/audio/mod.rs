@@ -15,14 +15,14 @@
 //! - Windows: `capture::CaptureHandle` (in-process cpal stream).
 
 // cpal-based capture: the Windows backend, the macOS fallback, and the macOS `__mic-capture` child implementation
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod capture;
 // Wire protocol shared by the `__mic-capture` child (writer, in `capture`) and the macOS parent (parser, in `capture_subprocess`)
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 mod protocol;
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub use capture::capture_pcm_for_duration;
-#[cfg(not(target_os = "linux"))]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use capture::run_capture_child_cli;
 #[cfg(target_os = "windows")]
 pub use capture::{CaptureHandle, input_device_info, spawn_pcm_capture};

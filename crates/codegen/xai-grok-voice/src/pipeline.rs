@@ -4,7 +4,7 @@
 //! They back both a toggle (`/voice`, `Ctrl+Shift+M`) and true push-to-talk (F12 hold), hence the `Ptt*` names.
 //! A press may be followed by a release after a long hold or, for a toggle, a later stop.
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use std::collections::VecDeque;
 
 use tokio::sync::mpsc;
@@ -14,7 +14,7 @@ use crate::auth::SharedVoiceAuth;
 use crate::config::VoiceConfig;
 use crate::error::VoiceError;
 use crate::event::VoiceEvent;
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use crate::stt::{StreamingSttEvent, StreamingSttSession};
 
 /// Commands from the pager event loop (toggle start/stop, or F12 push-to-talk).
@@ -115,7 +115,7 @@ async fn open_session(
     }
 }
 
-#[cfg(not(feature = "audio"))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
 async fn start_capture_session(
     _config: &VoiceConfig,
     _auth: &SharedVoiceAuth,
@@ -190,7 +190,7 @@ fn no_speech_error() -> (String, Option<String>) {
     )
 }
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 async fn start_capture_session(
     config: &VoiceConfig,
     auth: &SharedVoiceAuth,

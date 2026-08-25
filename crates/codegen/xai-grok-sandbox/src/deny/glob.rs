@@ -6,11 +6,11 @@
 //! Parity invariant: `validate_deny_glob` accepts/rejects identically on both platforms, and the accepted subset translates the SAME on both.
 //! The `macos_regex_matches_globset_property` cross-product test asserts this.
 
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use nono::CapabilitySet;
 #[cfg(all(feature = "enforce", target_os = "linux"))]
 use std::collections::BTreeSet;
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use std::path::{Path, PathBuf};
 #[cfg(all(feature = "enforce", target_os = "linux"))]
 use std::sync::Mutex;
@@ -21,7 +21,7 @@ use super::{emit_seatbelt_deny, macos_deny_aliases};
 
 /// Split a profile's raw deny entries into exact paths (handled by the literal / subpath kernel-deny flow) and glob patterns.
 /// Non-glob entries are returned unchanged so their exact-path enforcement is preserved.
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn partition_deny_entries(deny: &[PathBuf]) -> (Vec<PathBuf>, Vec<String>) {
     let mut exact = Vec::new();
     let mut globs = Vec::new();
@@ -37,7 +37,7 @@ pub(crate) fn partition_deny_entries(deny: &[PathBuf]) -> (Vec<PathBuf>, Vec<Str
 /// Split a glob into its literal root and the tail from the first glob component.
 /// For example `secrets/**` splits to `<workspace>/secrets` plus `**`, and `/home/**/.ssh` to `/home` plus `**/.ssh`.
 /// Root plus tail always re-joins to the original pattern, so the macOS regex body is unchanged; the alias set follows the (possibly deeper) root.
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 fn split_glob_root(workspace: &Path, glob: &str) -> (PathBuf, String) {
     let (mut root, rest) = match glob.strip_prefix('/') {
         Some(absolute) => (PathBuf::from("/"), absolute),
@@ -64,7 +64,7 @@ fn split_glob_root(workspace: &Path, glob: &str) -> (PathBuf, String) {
 ///    Rejecting those forms on both platforms keeps the two backends in agreement.
 ///    A user wanting alternation writes separate deny entries.
 /// 2. Compile through `globset` (the Linux matcher) so a malformed glob (`a**b`, unterminated `[`) fails closed identically on both platforms.
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn validate_deny_glob(glob: &str) -> anyhow::Result<()> {
     if let Some(c) = glob.chars().find(|&c| matches!(c, '{' | '}' | '\\')) {
         anyhow::bail!(
@@ -275,7 +275,7 @@ fn seatbelt_regex_filter(regex: &str) -> Option<String> {
 /// Unlike the exact-path flow, this does NOT call `remove_exact_file_caps_for_paths` (a glob can't enumerate the file caps it collides with).
 /// Glob denies rely on Seatbelt last-match ordering: the deny platform rules are emitted after the read/write allows, so the regex deny wins.
 /// The e2e is the contract.
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub(crate) fn apply_deny_globs_to_capability_set(
     caps: &mut CapabilitySet,
     workspace: &Path,
@@ -522,11 +522,11 @@ pub(crate) fn expand_deny_globs(
 #[cfg(test)]
 mod tests {
     // All tests here exercise enforce+unix paths; without the gate `super::*` is unused on `--no-default-features`
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     use super::*;
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn is_glob_detects_metacharacters() {
         assert!(is_glob("**/.env"));
         assert!(is_glob("**/*.pem"));
@@ -540,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn partition_separates_globs_from_exact_paths() {
         let deny = vec![
             PathBuf::from(".env"),
@@ -560,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn split_glob_root_relative_vs_absolute() {
         let workspace = Path::new("/ws");
         assert_eq!(
@@ -582,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn validate_deny_glob_accepts_subset_rejects_rest() {
         // Supported subset (`*`, `?`, `**`, `[...]` incl. `[!a]`/`[^a]` negation).
         for glob in [

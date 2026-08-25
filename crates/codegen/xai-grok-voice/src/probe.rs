@@ -1,20 +1,20 @@
 //! Voice diagnostics: input-device lookup, silent-mic fix text, and an
 //! end-to-end probe (mic → streaming STT → transcript).
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use std::sync::Arc;
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use std::time::Duration;
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use tokio::time::timeout;
 
 use crate::auth::SharedVoiceAuth;
 use crate::config::VoiceConfig;
 use crate::error::VoiceError;
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 use crate::stt::{StreamingSttEvent, StreamingSttSession};
 
 /// Options for [`run_streaming_probe`].
@@ -35,7 +35,7 @@ pub struct VoiceProbeReport {
 }
 
 /// Capture mic audio and stream it to xAI STT, reporting the transcript.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub async fn run_streaming_probe(opts: VoiceProbeOptions) -> Result<VoiceProbeReport, VoiceError> {
     let bearer = crate::auth::require_bearer(&opts.auth).await?;
     let mut stt = StreamingSttSession::connect(&opts.config, &bearer).await?;
@@ -117,13 +117,13 @@ pub async fn run_streaming_probe(opts: VoiceProbeOptions) -> Result<VoiceProbeRe
 }
 
 /// Record mic only (no STT) — quick hardware check.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub fn run_mic_only_probe(sample_rate: u32, seconds: u32) -> Result<(usize, u32), VoiceError> {
     let (pcm, chunks) = crate::audio::capture_pcm_for_duration(sample_rate, seconds)?;
     Ok((pcm.len(), chunks))
 }
 
-#[cfg(not(feature = "audio"))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
 pub async fn run_streaming_probe(_opts: VoiceProbeOptions) -> Result<VoiceProbeReport, VoiceError> {
     Err(VoiceError::Config(
         "voice probe requires the `audio` feature (cpal)".into(),
@@ -140,12 +140,12 @@ pub struct InputDeviceInfo {
 
 /// Look up the input device without opening a stream (does not trigger the
 /// macOS mic-permission prompt).
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
 pub fn input_device_info() -> Result<InputDeviceInfo, VoiceError> {
     crate::audio::input_device_info()
 }
 
-#[cfg(not(feature = "audio"))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
 pub fn input_device_info() -> Result<InputDeviceInfo, VoiceError> {
     Err(VoiceError::Config(
         "voice audio capture disabled (build without `audio` feature)".into(),

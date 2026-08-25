@@ -34,6 +34,10 @@ xai-tty-utils = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 nix = { workspace = true }
+
+# pprof pulls in `mid` which only supports Linux+macOS (not OpenBSD), so gate it
+# to those platforms. The cpu_profile platform module is similarly gated.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 # No `flamegraph` feature: that pulls in inferno (CDDL-1.0), which we keep out
 # of shipped binaries. stop() emits folded stacks via pprof's public Report
 # API instead; render externally with speedscope or inferno-flamegraph.

@@ -5,10 +5,10 @@
     unreachable_code,
     dead_code
 )]
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 #[global_allocator]
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
-#[cfg(all(feature = "jemalloc", feature = "release-dist", unix))]
+#[cfg(all(feature = "jemalloc", feature = "release-dist", any(target_os = "linux", target_os = "macos")))]
 mod jemalloc_malloc_conf {
     /// jemalloc looks up `extern const char *malloc_conf`, a thin pointer, not a Rust `&[u8]` fat pointer.
     #[repr(transparent)]
@@ -25,7 +25,6 @@ mod jemalloc_malloc_conf {
     static MALLOC_CONF: MallocConfPtr = MallocConfPtr(CONF.as_ptr());
 }
 use anyhow::Result;
-use std::io::Write;
 use std::net::SocketAddr;
 use std::num::NonZeroUsize;
 use tokio_util::sync::CancellationToken;
@@ -209,7 +208,7 @@ fn init_tracing_simple(app_entrypoint: &'static str) {
                 service_version: env!("VERSION_WITH_COMMIT"),
                 app_entrypoint,
             },
-            xai_grok_shell::agent::init::build_default_otel_layer_config(),
+            xai_grok_shell::auth::credential_provider::build_default_otel_layer_config(),
         ));
     xai_grok_telemetry::debug_log::install_firehose(registry, app_entrypoint);
     xai_grok_telemetry::external::init(
@@ -614,7 +613,7 @@ async fn workspace_start(
     restart: bool,
     remote_settings: Option<xai_grok_shell::util::config::RemoteSettings>,
 ) -> Result<()> {
-    use xai_grok_login::ensure_authenticated;
+    use xai_grok_shell::auth::ensure_authenticated;
     xai_grok_shell::util::config::set_remote_campaigns_from_settings(remote_settings.as_ref());
     let raw_config = xai_grok_shell::config::load_effective_config()
         .map_err(|e| anyhow::anyhow!("Failed to load config: {e}"))?;
@@ -636,8 +635,6 @@ async fn workspace_start(
     }
     ensure_authenticated(
         &agent_config.grok_com_config,
-        agent_config.login_device_flow,
-        agent_config.endpoints.proxy_url(),
         false,
         Some("No cached credentials found. Run `grok login` first."),
     )
@@ -738,6 +735,7 @@ struct CachedSession {
     mcp_servers_json: Option<String>,
 }
 /// ACP state cached from the stdio stream for replay after leader reconnect.
+///
 /// Tracks EVERY session the external client has open (IDE clients drive multiple sessions over one bridge), not just the most recent one.
 /// A leader crash must restore all of them or the others die with "unknown session id" on their next prompt.
 #[derive(Default, Clone)]
@@ -923,9 +921,18 @@ fn parse_replay_response(msg: &str, expected_id: &serde_json::Value) -> Option<R
         Some(ReplayOutcome::ResponseOk)
     }
 }
-/// That is exactly what the stream would have carried before the reconnect. Only the response to the replayed
-/// request is swallowed. Returning before the `session/load` response is the root cause of the "unknown session id"
-/// failures after a leader crash.
+/// Send one replayed request to the (new) leader and pump messages until its response arrives.
+///
+/// `session/load` emits the full replay stream (session/update notifications) BEFORE its response.
+/// Waiting for the next message is therefore not waiting for the response.
+/// Everything that is not the response itself is forwarded verbatim to the external client's stdout.
+/// That is exactly what the stream would have carried before the reconnect.
+/// Only the response to the replayed request is swallowed.
+/// The external client already received a response for its original send and must not see a duplicate or unknown-id response.
+///
+/// Returning before the `session/load` response is the root cause of the "unknown session id" failures after a leader crash.
+/// The bridge declared the reconnect complete while the new leader was still loading the session.
+/// The client's next `session/prompt` then raced the load and lost.
 #[tracing::instrument(level = "debug", skip_all)]
 async fn replay_request_until_response(
     tx: &tokio::sync::mpsc::UnboundedSender<String>,
@@ -1008,8 +1015,13 @@ fn replay_load_json(sid: &str, cached: &CachedSession) -> Option<String> {
         .to_string(),
     )
 }
-/// Replay the cached `initialize` and every cached `session/load` to a freshly (re-)elected leader. `None` when
-/// there was nothing to replay or every restore failed.
+/// Replay the cached `initialize` and every cached `session/load` to a freshly (re-)elected leader.
+/// Blocks until the leader has finished loading EACH session.
+/// Loads are sent strictly sequentially, each awaiting its response; reusing the synthesized request id relies on this ordering.
+///
+/// Returns the primary restored session id (the most recently active one, falling back to any successfully restored session).
+/// `None` when there was nothing to replay or every restore failed.
+/// Callers then emit `x.ai/leader_reconnected` with empty params, signalling the external client to re-establish state itself.
 #[tracing::instrument(skip_all)]
 async fn replay_acp_state_after_reconnect(
     tx: &tokio::sync::mpsc::UnboundedSender<String>,
@@ -1068,13 +1080,11 @@ async fn replay_acp_state_after_reconnect(
         .or_else(|| restored.last().cloned())
 }
 /// Flush observability, then exit. Used by the agent/headless signal handler.
+///
 /// Does NOT write terminal escape codes; agent mode never enables TUI modes.
 /// The TUI has its own signal handler (`app::signal_handler`) that does the full crossterm teardown.
 fn shutdown_and_flush_telemetry(exit_code: i32) -> ! {
-    {
-        let _exit_span = tracing::info_span!("teardown.process_exit").entered();
-        xai_grok_telemetry::sentry::flush_on_shutdown();
-    }
+    xai_grok_telemetry::sentry::flush_on_shutdown();
     xai_grok_telemetry::otel_layer::shutdown_otel();
     xai_grok_telemetry::debug_log::flush();
     finalize_span_profile();
@@ -1156,19 +1166,15 @@ async fn run_agent_command(
     let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
     xai_grok_telemetry::instrumentation::install_panic_hook();
     if trust {
-        use xai_grok_workspace::folder_trust::{grant_folder_trust, report_cli_trust_grant};
         match std::env::current_dir() {
-            Ok(cwd) => report_cli_trust_grant(&grant_folder_trust(&cwd)),
+            Ok(cwd) => xai_grok_workspace::folder_trust::grant_folder_trust(&cwd),
             Err(e) => {
-                tracing::warn!(error = %e, "--trust: failed to resolve cwd; folder not trusted");
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "error: --trust: failed to resolve cwd; folder not trusted: {e}"
-                );
+                tracing::warn!(error = %e, "--trust: failed to resolve cwd; folder not trusted")
             }
         }
     }
     let had_prefetch = xai_grok_shell::agent::models::startup_prefetch::begin(None);
+    xai_grok_shell::agent::mvp_agent::warm_async_http_client();
     let is_stdio = matches!(agent_args.mode, Some(AgentCmd::Stdio));
     let is_leader = matches!(agent_args.mode, Some(AgentCmd::Leader(_)));
     if !is_stdio && !is_leader {
@@ -1589,8 +1595,16 @@ async fn run_agent_command(
         }
     }
 }
-/// Raise the per-process fd soft limit toward the hard limit. A 1024 limit fails with EMFILE under a ~100-session
-/// wave. Best-effort: never blocks startup (containers/cgroups may pin limits).
+/// Raise the per-process fd soft limit toward the hard limit.
+///
+/// Default soft limits (256 macOS, commonly 1024 Linux) are easily exceeded.
+/// Each session thread's runtime costs ~3 fds, and a wide parallel subagent wave adds transient fds during the spawn burst.
+/// A 1024 limit fails with EMFILE under a ~100-session wave.
+/// Targets 65536 on Linux (hard limits are typically at least 1M) and 8192 on macOS (`kern.maxfilesperproc` is often ~10k).
+/// No known in-tree `select(2)` users (Rust std/tokio use epoll/kqueue).
+/// Residual third-party `FD_SETSIZE` risk is accepted; the prior 8192 cap already exceeded FD_SETSIZE.
+///
+/// Best-effort: never blocks startup (containers/cgroups may pin limits).
 #[cfg(unix)]
 fn raise_fd_limit() {
     #[cfg(target_os = "macos")]
@@ -1618,9 +1632,15 @@ fn raise_fd_limit() {
 }
 #[cfg(not(unix))]
 fn raise_fd_limit() {}
-/// Clears `args.command` so the regular subcommand match doesn't try to handle it. The only gate is the feature
-/// flag: a disabled dashboard (`[dashboard].enabled = false` / `GROK_AGENT_DASHBOARD=0`) is a CLI error. It fires
-/// here, before the TUI starts, because the welcome view silently drops the equivalent runtime toast.
+/// Single audit point for the `Command::Dashboard` soft-subcommand.
+/// Sets `GROK_OPEN_DASHBOARD_AT_STARTUP=1` if the user asked for `grok dashboard`.
+/// Clears `args.command` so the regular subcommand match doesn't try to handle it.
+///
+/// The dashboard is independent of leader mode: it renders local sessions and, when a leader happens to be present, shows the leader roster too.
+/// So `grok dashboard` does NOT force leader mode and is compatible with `--no-leader`.
+///
+/// The only gate is the feature flag: a disabled dashboard (`[dashboard].enabled = false` / `GROK_AGENT_DASHBOARD=0`) is a CLI error.
+/// It fires here, before the TUI starts, because the welcome view silently drops the equivalent runtime toast.
 fn flag_dashboard_at_startup_if_requested(args: &mut PagerArgs) -> Result<()> {
     if !matches!(args.command, Some(Command::Dashboard)) {
         return Ok(());
@@ -1635,44 +1655,6 @@ fn flag_dashboard_at_startup_if_requested(args: &mut PagerArgs) -> Result<()> {
     args.command = None;
     unsafe { std::env::set_var("GROK_OPEN_DASHBOARD_AT_STARTUP", "1") };
     Ok(())
-}
-/// Kick off background work that overlaps startup. Add new prewarms here.
-fn schedule_startup_prewarm() {
-    xai_grok_shell::agent::mvp_agent::warm_async_http_client();
-}
-fn configure_process_env(mut args: PagerArgs) -> Result<PagerArgs> {
-    flag_dashboard_at_startup_if_requested(&mut args)?;
-    let args = args.apply_cwd()?;
-    unsafe {
-        if let Some(mode) = args.compaction_mode.as_deref() {
-            std::env::set_var("GROK_COMPACTION_MODE", mode);
-        }
-        if let Some(detail) = args.compaction_detail.as_deref() {
-            std::env::set_var("GROK_COMPACTION_DETAIL", detail);
-        }
-        if args.chat() {
-            std::env::set_var(xai_grok_shell::agent::chat_modes::GROK_CHAT_MODE_ENV, "1");
-        }
-        if let Some(socket) = args.leader_socket.as_deref() {
-            std::env::set_var(xai_grok_shell::leader::LEADER_SOCKET_ENV, socket);
-        }
-        if args.log_sampling {
-            std::env::set_var("GROK_LOG_SAMPLING", "1");
-        }
-        if let Some(path) = args.debug_file.as_deref() {
-            std::env::set_var("GROK_DEBUG_LOG", path);
-            std::env::remove_var("GROK_LOG_FILE");
-        }
-        if args.debug || args.debug_file.is_some() {
-            if std::env::var_os("GROK_DEBUG_LOG").is_none() {
-                std::env::set_var("GROK_DEBUG_LOG", "1");
-            }
-            if std::env::var_os("GROK_HOOKS_LOG").is_none() {
-                std::env::set_var("GROK_HOOKS_LOG", "1");
-            }
-        }
-    }
-    Ok(args)
 }
 const RUNTIME_SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 const GROK_WORKER_THREADS_ENV: &str = "GROK_WORKER_THREADS";
@@ -1770,9 +1752,13 @@ fn run_and_shutdown<F: std::future::Future>(
     runtime.shutdown_timeout(grace);
     output
 }
-/// Return freed-but-retained jemalloc pages to the OS. Resuming a long session then doesn't leave hundreds of MB of
-/// dead pages counted against the process for its lifetime.
-#[cfg(all(feature = "jemalloc", unix))]
+/// Return freed-but-retained jemalloc pages to the OS.
+///
+/// `arena.<MALLCTL_ARENAS_ALL>.purge` madvises away all dirty/muzzy pages in every arena.
+/// The pager invokes this (via the `memory_release` hook) right after known memory cliffs, e.g. dropping a session load's replay transient.
+/// Resuming a long session then doesn't leave hundreds of MB of dead pages counted against the process for its lifetime.
+/// (macOS keeps `MADV_FREE`d pages in RSS until systemwide pressure.)
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn purge_jemalloc_retained_pages() {
     static NAME: &[u8] = b"arena.4096.purge\0";
     let ret = unsafe {
@@ -1797,7 +1783,7 @@ fn purge_jemalloc_retained_pages() {
 /// Allocator gauges for the memory trace (`memory_trace` hook): advance the jemalloc epoch so the `stats.*` reads are current, then read each gauge.
 /// Returns `None` if any mallctl fails (trace records the absence).
 /// Uses the `tikv-jemalloc-ctl` raw helpers (shared with the heap-profile hooks below) instead of hand-rolled mallctl.
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_allocator_stats() -> Option<xai_grok_pager::memory_trace::AllocatorStats> {
     /// SAFETY: callers pass fixed NUL-terminated `stats.*` size_t ctl names.
     unsafe fn gauge(name: &[u8]) -> Option<u64> {
@@ -1822,7 +1808,7 @@ fn jemalloc_allocator_stats() -> Option<xai_grok_pager::memory_trace::AllocatorS
 /// Full jemalloc statistics dump for threshold snapshots (`malloc_stats_print` default human-readable format, arena detail included).
 /// This is the artifact the GCS memory-trace upload ships for offline analysis.
 /// Raw `tikv_jemalloc_sys` because jemalloc-ctl has no callback-form stats_print.
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_stats_dump() -> String {
     unsafe extern "C" fn append(opaque: *mut std::ffi::c_void, msg: *const std::ffi::c_char) {
         unsafe {
@@ -1840,7 +1826,7 @@ fn jemalloc_stats_dump() -> String {
     }
     out
 }
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_heap_stats() -> Option<xai_grok_shell::heap_profile::JemallocStats> {
     unsafe {
         tikv_jemalloc_ctl::raw::write(b"epoch\0", 1u64).ok()?;
@@ -1852,19 +1838,19 @@ fn jemalloc_heap_stats() -> Option<xai_grok_shell::heap_profile::JemallocStats> 
         })
     }
 }
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_set_prof_active(active: bool) -> bool {
     unsafe { tikv_jemalloc_ctl::raw::write(b"prof.active\0", active).is_ok() }
 }
-#[cfg(all(test, feature = "jemalloc", unix))]
+#[cfg(all(test, feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_read_prof_active() -> Option<bool> {
     unsafe { tikv_jemalloc_ctl::raw::read::<bool>(b"prof.active\0").ok() }
 }
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_prof_available() -> bool {
     unsafe { tikv_jemalloc_ctl::raw::read::<bool>(b"opt.prof\0").unwrap_or(false) }
 }
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn jemalloc_dump_to_path(path: &std::path::Path) -> Result<(), String> {
     use std::os::unix::ffi::OsStrExt;
     if !jemalloc_prof_available() {
@@ -1873,7 +1859,7 @@ fn jemalloc_dump_to_path(path: &std::path::Path) -> Result<(), String> {
     let c = std::ffi::CString::new(path.as_os_str().as_bytes()).map_err(|e| e.to_string())?;
     unsafe { tikv_jemalloc_ctl::raw::write(b"prof.dump\0", c.as_ptr()) }.map_err(|e| e.to_string())
 }
-#[cfg(all(feature = "jemalloc", unix))]
+#[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
 fn install_heap_profile_hooks() {
     xai_grok_shell::heap_profile::install(xai_grok_shell::heap_profile::HeapProfileHooks {
         stats: jemalloc_heap_stats,
@@ -1934,22 +1920,18 @@ fn main() {
         return;
     }
     xai_grok_pager_minimal::install();
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     xai_grok_pager::memory_release::install_release_hook(purge_jemalloc_retained_pages);
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     {
         xai_grok_pager::memory_trace::install_allocator_stats_provider(jemalloc_allocator_stats);
         xai_grok_pager::memory_trace::install_allocator_dump_provider(jemalloc_stats_dump);
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     install_heap_profile_hooks();
     unsafe {
         xai_grok_shell::agent::external_otel_pin::strip_conflicting_process_env();
     }
-    let args = configure_process_env(args).unwrap_or_else(|err| {
-        eprintln!("grok: {err:#}");
-        std::process::exit(1);
-    });
     xai_grok_pager::memory_trace::start(xai_grok_pager::memory_trace::default_dir());
     raise_fd_limit();
     if let Err(e) = xai_grok_config::validate_requirements() {
@@ -2008,19 +1990,48 @@ fn main() {
     if let Err(e) = result {
         xai_tty_utils::restore_native_stderr();
         finalize_span_profile();
-        let report = match e.downcast_ref::<xai_grok_pager::app::StartupFailure>() {
-            Some(startup) => startup.user_report(),
-            None => format!("Error: {e:#}"),
-        };
-        xai_grok_pager::best_effort_stderr::eprint_line(&report);
+        match e.downcast_ref::<xai_grok_pager::app::StartupFailure>() {
+            Some(startup) => eprintln!("{}", startup.user_report()),
+            None => eprintln!("Error: {e:#}"),
+        }
         drop(_sentry_guard);
         std::process::exit(1);
     }
     finalize_span_profile();
 }
 #[tracing::instrument(level = "debug", skip_all)]
-async fn async_main(mut args: PagerArgs) -> Result<()> {
+async fn async_main(args: PagerArgs) -> Result<()> {
     xai_grok_extra_ca::ensure_default_crypto_provider();
+    let mut args = args.apply_cwd()?;
+    if let Some(ref mode) = args.compaction_mode {
+        unsafe { std::env::set_var("GROK_COMPACTION_MODE", mode) };
+    }
+    if let Some(ref detail) = args.compaction_detail {
+        unsafe { std::env::set_var("GROK_COMPACTION_DETAIL", detail) };
+    }
+    if args.chat() {
+        unsafe {
+            std::env::set_var(xai_grok_shell::agent::chat_modes::GROK_CHAT_MODE_ENV, "1");
+        }
+    }
+    if let Some(ref socket) = args.leader_socket {
+        unsafe { std::env::set_var(xai_grok_shell::leader::LEADER_SOCKET_ENV, socket) };
+    }
+    if let Some(ref path) = args.debug_file {
+        unsafe {
+            std::env::set_var("GROK_DEBUG_LOG", path);
+            std::env::remove_var("GROK_LOG_FILE");
+        }
+    }
+    if args.debug || args.debug_file.is_some() {
+        let set_if_unset = |k: &str, v: &str| {
+            if std::env::var_os(k).is_none() {
+                unsafe { std::env::set_var(k, v) };
+            }
+        };
+        set_if_unset("GROK_DEBUG_LOG", "1");
+        set_if_unset("GROK_HOOKS_LOG", "1");
+    }
     if let Some(Command::Completions { shell }) = &args.command {
         xai_grok_pager::completions_cmd::run(*shell);
         return Ok(());
@@ -2028,16 +2039,6 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
     if let Some(Command::Wrap(ref wrap_args)) = args.command {
         return xai_grok_pager::wrap_cmd::run(wrap_args);
     }
-    let is_interactive = args.command.is_none()
-        && args.single.is_none()
-        && args.prompt_json.is_none()
-        && args.prompt_file.is_none();
-    xai_grok_shell::http::set_client_name(if is_interactive {
-        xai_grok_workspace::permission::ClientType::GrokPager
-    } else {
-        xai_grok_workspace::permission::ClientType::Generic
-    });
-    schedule_startup_prewarm();
     args.pin_local_resume_target()?;
     let saved_profile = args.saved_resume_profile();
     let sandbox_profile_arg = match args.startup_sandbox_profile(saved_profile.as_deref()) {
@@ -2052,27 +2053,20 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
         }
     };
     if args.trust {
-        use xai_grok_workspace::folder_trust::{grant_folder_trust, report_cli_trust_grant};
         match std::env::current_dir() {
-            Ok(cwd) => report_cli_trust_grant(&grant_folder_trust(&cwd)),
+            Ok(cwd) => xai_grok_workspace::folder_trust::grant_folder_trust(&cwd),
             Err(e) => {
-                tracing::warn!(error = %e, "--trust: failed to resolve cwd; folder not trusted");
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "error: --trust: failed to resolve cwd; folder not trusted: {e}"
-                );
+                eprintln!("warning: --trust: failed to resolve cwd; folder not trusted: {e}");
             }
         }
     }
     if command_needs_pre_sandbox_policy_heal(args.command.as_ref()) {
         match xai_grok_shell::config::load_agent_config_disk_only() {
             Ok(agent_cfg) => {
-                let auth_manager =
-                    std::sync::Arc::new(xai_grok_login::AuthManager::new_with_proxy_base_url(
-                        &xai_grok_shell::util::grok_home::grok_home(),
-                        agent_cfg.grok_com_config.clone(),
-                        agent_cfg.endpoints.proxy_url(),
-                    ));
+                let auth_manager = std::sync::Arc::new(xai_grok_shell::auth::AuthManager::new(
+                    &xai_grok_shell::util::grok_home::grok_home(),
+                    agent_cfg.grok_com_config.clone(),
+                ));
                 auth_manager.configure_refresher(
                     agent_cfg.grok_com_config.auth_provider_command.clone(),
                     None,
@@ -2092,6 +2086,16 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
         sandbox_profile_arg.as_deref(),
         args.cwd.as_deref(),
     );
+    flag_dashboard_at_startup_if_requested(&mut args)?;
+    let is_interactive = args.command.is_none()
+        && args.single.is_none()
+        && args.prompt_json.is_none()
+        && args.prompt_file.is_none();
+    xai_grok_shell::http::set_client_name(if is_interactive {
+        xai_grok_workspace::permission::ClientType::GrokPager
+    } else {
+        xai_grok_workspace::permission::ClientType::Generic
+    });
     if let Some(identity) = process_identity(args.command.as_ref(), is_interactive) {
         set_identity(identity);
     }
@@ -2257,19 +2261,7 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
                 let _otel_guard = xai_grok_telemetry::otel_layer::otel_guard();
                 let config = xai_grok_shell::config::load_agent_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
-                let authenticated = xai_grok_login::run_cli_login(
-                    config.grok_com_config.clone(),
-                    config.login_device_flow,
-                    config.endpoints.proxy_url(),
-                    oauth,
-                    device_auth,
-                    devbox,
-                    |auth_manager| {
-                        xai_grok_shell::agent::init::update_telemetry_config(&config, auth_manager)
-                    },
-                )
-                .await?;
-                xai_grok_shell::agent::init::apply_post_login_config(authenticated).await?;
+                xai_grok_shell::auth::run_cli_login(&config, oauth, device_auth, devbox).await?;
                 println!();
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
             }
@@ -2277,7 +2269,7 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
                 init_tracing_simple("cli");
                 let config = xai_grok_shell::config::load_agent_config_disk_only()
                     .map_err(|e| anyhow::anyhow!("Failed to create agent config: {e}"))?;
-                xai_grok_shell::agent::init::run_cli_logout(&config.grok_com_config)?;
+                xai_grok_shell::auth::run_cli_logout(&config)?;
                 xai_grok_shell::instrumentation::finalize_and_exit(0);
             }
             Command::Wrap(ref wrap_args) => {
@@ -2349,7 +2341,6 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
                 continue_last_session: args.continue_last_session,
                 fork_session: args.fork_session,
                 worktree: args.worktree,
-                worktree_ref: args.worktree_ref,
                 restore_code: args.restore_code,
                 agent: args.agent.clone(),
                 agents_json: args.agents_json.clone(),
@@ -2408,9 +2399,13 @@ async fn async_main(mut args: PagerArgs) -> Result<()> {
         Err(e) => Err(e),
     }
 }
-/// Returns `true` when an update path completed without a reported failure. It falls back to a fresh blocking `grok
-/// update` only when there is no waiter or the child failed. (No waiter means the spawn failed or no download was
-/// needed because the target was already on disk.).
+/// Complete the update after a quit-for-update (Ctrl+U) exit.
+/// Returns `true` when an update path completed without a reported failure.
+///
+/// Prefers awaiting the parked waiter for the background `grok update` child spawned at startup; the download is usually already done or in flight.
+/// It falls back to a fresh blocking `grok update` only when there is no waiter or the child failed.
+/// (No waiter means the spawn failed or no download was needed because the target was already on disk.)
+/// The blocking run itself resolves to "Already up to date" without downloading when the disk is current.
 #[tracing::instrument(level = "debug", skip_all)]
 async fn finish_update_on_exit(
     adopted: Option<tokio::task::JoinHandle<std::io::Result<std::process::ExitStatus>>>,
@@ -2498,9 +2493,10 @@ fn stdio_auto_update_enabled(
 ) -> bool {
     is_stdio && !use_leader && updates_enabled && managed_install
 }
-/// True when `exe` is the binary `<grok_home>/bin/grok` resolves to, the install that adopts a staged update on
-/// respawn. Both sides are canonicalized; any failure reports unmanaged and skips the update. The npm shim
-/// hardcodes `~/.grok`, so a custom `GROK_HOME` skips here too.
+/// True when `exe` is the binary `<grok_home>/bin/grok` resolves to, the
+/// install that adopts a staged update on respawn. Both sides are
+/// canonicalized; any failure reports unmanaged and skips the update. The
+/// npm shim hardcodes `~/.grok`, so a custom `GROK_HOME` skips here too.
 fn is_managed_install(exe: Option<std::path::PathBuf>, grok_home: &std::path::Path) -> bool {
     if grok_home.as_os_str().is_empty() {
         return false;
@@ -2578,12 +2574,10 @@ async fn run_update_command(
         .map_err(|e| tracing::warn!("grok update: telemetry init skipped (agent config: {e})"))
         .ok();
     if let Some(agent_cfg) = telemetry_cfg {
-        let auth_manager =
-            std::sync::Arc::new(xai_grok_login::AuthManager::new_with_proxy_base_url(
-                &xai_grok_shell::util::grok_home::grok_home(),
-                agent_cfg.grok_com_config.clone(),
-                agent_cfg.endpoints.proxy_url(),
-            ));
+        let auth_manager = std::sync::Arc::new(xai_grok_shell::auth::AuthManager::new(
+            &xai_grok_shell::util::grok_home::grok_home(),
+            agent_cfg.grok_com_config.clone(),
+        ));
         xai_grok_shell::agent::init::update_telemetry_config(&agent_cfg, &auth_manager);
     }
     let result = auto_update::run_update(
@@ -2602,9 +2596,11 @@ async fn run_update_command(
     result?;
     Ok(())
 }
-/// After a successful `grok update`, ask any running leader on this machine that is older than `installed_version`
-/// to relaunch onto the new binary. Best-effort and non-fatal: discovery/connect/control failures are logged and
-/// skipped.
+/// After a successful `grok update`, ask any running leader on this machine that is older than `installed_version` to relaunch onto the new binary.
+/// (Bounded grace; running sessions close and reconnect via `session/load`.)
+///
+/// Best-effort and non-fatal: discovery/connect/control failures are logged and skipped.
+/// The leader re-checks the directional version guard authoritatively; the pager-side `live_info` check just avoids connecting to newer leaders.
 #[tracing::instrument(level = "debug", skip_all)]
 async fn signal_leaders_to_relaunch(installed_version: &str) {
     for d in xai_grok_shell::leader::discover_leaders().await {
@@ -2809,9 +2805,9 @@ mod tests {
             Some(Command::Version { json: false })
         ));
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     struct TempHeapDump(std::path::PathBuf);
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     impl TempHeapDump {
         fn new(label: &str) -> Self {
             let path = std::env::temp_dir().join(format!(
@@ -2832,13 +2828,13 @@ mod tests {
             assert!(meta.len() > 0, "empty dump file");
         }
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     impl Drop for TempHeapDump {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.0);
         }
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     fn require_opt_prof() -> bool {
         if jemalloc_prof_available() {
             return true;
@@ -2850,16 +2846,16 @@ mod tests {
         );
         false
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     fn assert_prof_active(expected: bool) {
         assert_eq!(jemalloc_read_prof_active(), Some(expected));
     }
     /// Restores process-global `prof.active` on drop (panic-safe for serial tests).
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     struct ProfActiveGuard {
         previous: bool,
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     impl ProfActiveGuard {
         fn set(active: bool) -> Self {
             let previous = jemalloc_read_prof_active().unwrap_or(false);
@@ -2870,13 +2866,13 @@ mod tests {
             Self { previous }
         }
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     impl Drop for ProfActiveGuard {
         fn drop(&mut self) {
             let _ = jemalloc_set_prof_active(self.previous);
         }
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     fn assert_stats_sane(stats: xai_grok_shell::heap_profile::JemallocStats) {
         assert!(stats.allocated > 0, "allocated={}", stats.allocated);
         assert!(stats.resident > 0, "resident={}", stats.resident);
@@ -2887,13 +2883,13 @@ mod tests {
             stats.allocated
         );
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     #[test]
     #[serial_test::serial(jemalloc_heap_profile)]
     fn jemalloc_stats_readable_after_epoch() {
         assert_stats_sane(jemalloc_heap_stats().expect("stats readable"));
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     #[test]
     #[serial_test::serial(jemalloc_heap_profile)]
     fn jemalloc_prof_active_round_trip_and_dump() {
@@ -2910,7 +2906,7 @@ mod tests {
         jemalloc_dump_to_path(dump.path()).expect("prof.dump");
         dump.assert_nonempty_dump();
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     #[test]
     #[serial_test::serial(jemalloc_heap_profile)]
     fn jemalloc_dump_rejects_interior_nul_path() {
@@ -2927,7 +2923,7 @@ mod tests {
             "unexpected error: {err}"
         );
     }
-    #[cfg(all(feature = "jemalloc", unix))]
+    #[cfg(all(feature = "jemalloc", any(target_os = "linux", target_os = "macos")))]
     #[test]
     #[serial_test::serial(jemalloc_heap_profile)]
     fn install_heap_profile_hooks_wires_shell_apis() {
@@ -3450,8 +3446,15 @@ mod tests {
         );
         responder.await.unwrap();
     }
-    /// Regression test for the "unknown session id" bug after a leader crash. The replay must instead. swallow only the
-    /// responses to the replayed requests.
+    /// Regression test for the "unknown session id" bug after a leader crash.
+    ///
+    /// `session/load` streams replay notifications BEFORE its response.
+    /// The old drain logic consumed exactly one message per replayed request and returned.
+    /// That declared the reconnect complete while the new leader was still loading the session.
+    /// The replay must instead:
+    ///   1. wait for the actual `session/load` RESPONSE (matched by id),
+    ///   2. forward interleaved notifications to the client verbatim,
+    ///   3. swallow only the responses to the replayed requests.
     #[tokio::test]
     async fn replay_waits_for_load_response_through_notifications() {
         let (leader_tx, mut leader_rx) = tokio::sync::mpsc::unbounded_channel();

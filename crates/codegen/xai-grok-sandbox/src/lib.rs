@@ -38,6 +38,8 @@ mod test_util;
 mod types;
 pub use hook_write_deny::{profile_enforces_hook_write_deny, verify_hook_write_deny_enforced};
 pub use logging::SandboxLogger;
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
+use nono::Sandbox;
 pub use network_policy::{
     ChildNetworkPolicy, NETWORK_POLICY_SNAPSHOT_VERSION, NetworkPolicySnapshot,
     NetworkPolicySnapshotError, WebsiteAction, WebsiteOrigin, WebsiteOriginError, WebsitePolicy,
@@ -62,7 +64,7 @@ pub fn requires_hook_write_deny(profile: &ProfileName, workspace: &Path) -> bool
         _ => true,
     }
 }
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use nono::Sandbox;
 use std::path::Path;
 #[cfg(any(target_os = "linux", test))]
@@ -112,9 +114,11 @@ pub fn set_configured_profile(name: impl Into<String>) {
 pub fn configured_profile_name() -> Option<&'static str> {
     CONFIGURED_PROFILE.get().map(|s| s.as_str())
 }
-/// The non-`off` sandbox profile this process was requested with, if any. This is the configured request, not a report
-/// that enforcement succeeded. `is_active()` can be false while the process is still confined (e.g. some Linux bwrap
-/// paths). A requested-but-unapplied profile already warns the user; keying on the request is the fail-closed choice.
+/// The non-`off` sandbox profile this process was **requested** with, if any.
+///
+/// This is the configured request, not a report that enforcement succeeded.
+/// `is_active()` can be false while the process is still confined (e.g. some Linux bwrap paths).
+/// A requested-but-unapplied profile already warns the user; keying on the request is the fail-closed choice.
 pub fn requested_confinement_profile() -> Option<&'static str> {
     configured_profile_name().filter(|name| profile_confines(name))
 }
@@ -176,7 +180,7 @@ impl SandboxManager {
     }
     /// Apply the sandbox to the current process. **Irreversible.**
     /// Degrades gracefully if the platform doesn't support it.
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn apply(&mut self, workspace: &Path) -> anyhow::Result<()> {
         if self.profile == ProfileName::Off {
             tracing::info!("Sandbox disabled (profile: off)");
@@ -238,7 +242,7 @@ impl SandboxManager {
         }
     }
     /// Stub when `enforce` feature is disabled; sandbox is not applied.
-    #[cfg(not(all(feature = "enforce", unix)))]
+    #[cfg(not(all(feature = "enforce", any(target_os = "linux", target_os = "macos"))))]
     pub fn apply(&mut self, _workspace: &Path) -> anyhow::Result<()> {
         tracing::info!(
             profile = %self.profile,
@@ -258,7 +262,7 @@ impl SandboxManager {
             ),
         });
     }
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn support_info() -> nono::SupportInfo {
         Sandbox::support_info()
     }
@@ -277,9 +281,10 @@ impl SandboxManager {
         &self.logger
     }
 }
-/// Build a bwrap command that re-execs the current process with `deny_write` paths mounted read-only. `deny_read` paths
-/// are bound over with an unreadable placeholder (EPERM on read). Returns `None` if already inside bwrap. Caller should
-/// `cmd.exec()` the result.
+/// Build a bwrap command that re-execs the current process with `deny_write` paths mounted read-only.
+/// `deny_read` paths are bound over with an unreadable placeholder (EPERM on read).
+///
+/// Returns `None` if already inside bwrap. Caller should `cmd.exec()` the result.
 pub fn bwrap_reexec_command(
     deny_write: &[&str],
     deny_read: &[&str],
@@ -388,9 +393,10 @@ fn chmod_000(path: &Path) -> Option<()> {
     std::fs::set_permissions(path, perms).ok()?;
     Some(())
 }
-/// Zero-permission placeholder (file or dir) under `grok_home` used by bwrap bind-over. The placeholder name is suffixed
-/// with the current PID so concurrent grok processes don't race each other's create/remove/chmod on a shared path. A lost
-/// race could yield `None`, silently dropping the bind and failing open.
+/// Zero-permission placeholder (file or dir) under `grok_home` used by bwrap bind-over.
+///
+/// The placeholder name is suffixed with the current PID so concurrent grok processes don't race each other's create/remove/chmod on a shared path.
+/// A lost race could yield `None`, silently dropping the bind and failing open.
 #[cfg(all(feature = "enforce", target_os = "linux"))]
 fn bwrap_blocked_placeholder(name: &str, want_dir: bool) -> Option<PathBuf> {
     use std::fs::OpenOptions;
@@ -434,10 +440,13 @@ fn is_devbox_based(profile: &ProfileName, config: &SandboxConfig) -> bool {
         _ => false,
     }
 }
-/// Whether kernel read-deny enforcement is required. This is the single source of truth, so callers (e.g. the shell's
-/// fail-closed startup path) cannot drift and silently fail open. Keying "requires" on that empty-on-error result would
-/// silently downgrade to fail-open (Linux) when resolution hiccups. This intrinsic check stays fail-closed.
-#[cfg(all(feature = "enforce", unix))]
+/// Whether kernel read-deny enforcement is required.
+/// This is the single source of truth, so callers (e.g. the shell's fail-closed startup path) cannot drift and silently fail open.
+///
+/// Decided directly from the profile config, NOT from the resolved/expanded deny set, which returns empty on failure.
+/// Keying "requires" on that empty-on-error result would silently downgrade to fail-open (Linux) when resolution hiccups.
+/// This intrinsic check stays fail-closed.
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub fn requires_read_deny(profile: &ProfileName, workspace: &Path) -> bool {
     match profile {
         ProfileName::Custom(name) => {
@@ -460,7 +469,7 @@ pub fn requires_read_deny(profile: &ProfileName, workspace: &Path) -> bool {
     }
 }
 /// Stub when `enforce` is unavailable; nothing is kernel-enforced.
-#[cfg(not(all(feature = "enforce", unix)))]
+#[cfg(not(all(feature = "enforce", any(target_os = "linux", target_os = "macos"))))]
 pub fn requires_read_deny(_profile: &ProfileName, _workspace: &Path) -> bool {
     false
 }
@@ -487,9 +496,10 @@ fn requires_data_write_deny_for(
 fn data_path_requires_bind(path: &Path) -> bool {
     path.try_exists().unwrap_or(true)
 }
-/// Whether a `resolve_profile` failure must refuse startup. Any profile that enforces hook write-deny or its own deny
-/// list cannot proceed with an empty plan. Devbox resolution is infallible today, so that arm is defense in depth against
-/// a future fallible resolve step.
+/// Whether a `resolve_profile` failure must refuse startup.
+/// Any profile that enforces hook write-deny or its own deny list cannot proceed with an empty plan.
+/// The read-deny arm covers deny-carrying `extends = "devbox"` profiles, which the hook arm does not.
+/// Devbox resolution is infallible today, so that arm is defense in depth against a future fallible resolve step.
 #[cfg(all(feature = "enforce", target_os = "linux"))]
 fn resolve_failure_must_refuse(profile: &ProfileName, workspace: &Path) -> bool {
     requires_hook_write_deny(profile, workspace)
@@ -910,7 +920,7 @@ mod tests {
     }
     /// Create a temp workspace whose `.grok/sandbox.toml` contains `toml_body`.
     /// Returns the workspace path (caller removes it).
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn temp_workspace_with_sandbox_toml(tag: &str, toml_body: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -928,7 +938,7 @@ mod tests {
     }
     /// Create a temp workspace defining a `denytest` profile (extends `workspace`) with the given `deny` list.
     /// `deny_toml` is the raw TOML array body (e.g. `"\".env\""`).
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn temp_workspace_with_deny(tag: &str, deny_toml: &str) -> PathBuf {
         temp_workspace_with_sandbox_toml(
             tag,
@@ -936,7 +946,7 @@ mod tests {
         )
     }
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn requires_read_deny_only_for_custom_profile_with_deny() {
         let ws = temp_workspace_with_deny("requires-deny", "\".env\"");
         assert!(requires_read_deny(

@@ -6,6 +6,7 @@
 //! - **Linux**: a subprocess recorder (`pw-record`/`parec`/`arecord`) — the
 //!   static-musl release binary cannot link `cpal` → `alsa-sys`; see
 //!   [`capture_linux`].
+//! - **OpenBSD**: the same subprocess interface, with `aucat` (sndio, base).
 //! - **macOS**: a subprocess too — the self-exec `__mic-capture` helper —
 //!   because in-process CoreAudio memory is never returned after the stream
 //!   drops; see [`capture_subprocess`].
@@ -16,7 +17,7 @@
 //!
 //! `CaptureHandle` is deliberately one name per platform, resolved by the
 //! re-exports below:
-//! - Linux → `pipe::ChildCaptureHandle` (recorder subprocess);
+//! - Linux/OpenBSD → `pipe::ChildCaptureHandle` (recorder subprocess);
 //! - macOS → `capture_subprocess::CaptureHandle`, an enum over the helper
 //!   subprocess and the in-process fallback;
 //! - Windows → `capture::CaptureHandle` (in-process cpal stream).
@@ -37,7 +38,7 @@ pub(crate) use capture::run_capture_child_cli;
 pub use capture::{CaptureHandle, input_device_info, spawn_pcm_capture};
 
 // Shared PCM-over-pipe plumbing for the two subprocess backends.
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "openbsd"))]
 mod pipe;
 
 #[cfg(target_os = "macos")]
@@ -45,9 +46,9 @@ mod capture_subprocess;
 #[cfg(target_os = "macos")]
 pub use capture_subprocess::{CaptureHandle, input_device_info, spawn_pcm_capture};
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "openbsd"))]
 mod capture_linux;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "openbsd"))]
 pub use capture_linux::{
     CaptureHandle, capture_pcm_for_duration, input_device_info, spawn_pcm_capture,
 };

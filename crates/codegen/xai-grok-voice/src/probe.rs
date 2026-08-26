@@ -1,20 +1,20 @@
 //! Voice diagnostics: input-device lookup, silent-mic fix text, and an
 //! end-to-end probe (mic → streaming STT → transcript).
 
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use std::sync::Arc;
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use std::time::Duration;
 
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use tokio::time::timeout;
 
 use crate::auth::SharedVoiceAuth;
 use crate::config::VoiceConfig;
 use crate::error::VoiceError;
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use crate::stt::{StreamingSttEvent, StreamingSttSession};
 
 /// Options for [`run_streaming_probe`].
@@ -35,7 +35,7 @@ pub struct VoiceProbeReport {
 }
 
 /// Capture mic audio and stream it to xAI STT, reporting the transcript.
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub async fn run_streaming_probe(opts: VoiceProbeOptions) -> Result<VoiceProbeReport, VoiceError> {
     let bearer = crate::auth::require_bearer(&opts.auth).await?;
     let mut stt = StreamingSttSession::connect(&opts.config, &bearer).await?;
@@ -117,13 +117,13 @@ pub async fn run_streaming_probe(opts: VoiceProbeOptions) -> Result<VoiceProbeRe
 }
 
 /// Record mic only (no STT) — quick hardware check.
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub fn run_mic_only_probe(sample_rate: u32, seconds: u32) -> Result<(usize, u32), VoiceError> {
     let (pcm, chunks) = crate::audio::capture_pcm_for_duration(sample_rate, seconds)?;
     Ok((pcm.len(), chunks))
 }
 
-#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd"))))]
 pub async fn run_streaming_probe(_opts: VoiceProbeOptions) -> Result<VoiceProbeReport, VoiceError> {
     Err(VoiceError::Config(
         "voice probe requires the `audio` feature (cpal)".into(),
@@ -140,12 +140,12 @@ pub struct InputDeviceInfo {
 
 /// Look up the input device without opening a stream (does not trigger the
 /// macOS mic-permission prompt).
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub fn input_device_info() -> Result<InputDeviceInfo, VoiceError> {
     crate::audio::input_device_info()
 }
 
-#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd"))))]
 pub fn input_device_info() -> Result<InputDeviceInfo, VoiceError> {
     Err(VoiceError::Config(
         "voice audio capture disabled (build without `audio` feature)".into(),

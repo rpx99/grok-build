@@ -1558,21 +1558,35 @@ async fn run_agent_command(
 }
 /// Raise the per-process fd soft limit toward the hard limit.
 ///
-/// Default soft limits (256 macOS, commonly 1024 Linux) are easily exceeded:
-/// each session thread's runtime costs ~3 fds, and a wide parallel subagent
-/// wave adds spawn-burst transients — a 1024 limit fails with EMFILE under a
-/// ~100-session wave. Targets 65536 on Linux (hard limits typically >= 1M)
-/// and 8192 on macOS (`kern.maxfilesperproc` is often ~10k). No known
-/// in-tree `select(2)` users (Rust std/tokio use epoll/kqueue); residual
-/// third-party `FD_SETSIZE` risk is accepted — the prior 8192 cap already
-/// exceeded FD_SETSIZE.
+/// Default soft limits (256 macOS, commonly 1024 Linux, 512 OpenBSD login
+/// class) are easily exceeded: each session thread's runtime costs ~3 fds,
+/// and a wide parallel subagent wave adds spawn-burst transients — a 1024
+/// limit fails with EMFILE under a ~100-session wave. Targets 65536 on
+/// Linux (hard limits typically >= 1M) and 8192 on macOS/BSD.
+/// OpenBSD `kern.maxfiles` is ~64k system-wide, so 65536 per process would
+/// exhaust the table; login.conf `openfiles-max` (default 1024) is the hard
+/// cap we can actually reach without a custom login class.
+///
+/// No known in-tree `select(2)` users (Rust std/tokio use epoll/kqueue);
+/// residual third-party `FD_SETSIZE` risk is accepted — the prior 8192 cap
+/// already exceeded FD_SETSIZE.
 ///
 /// Best-effort: never blocks startup (containers/cgroups may pin limits).
 #[cfg(unix)]
 fn raise_fd_limit() {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
     const TARGET: libc::rlim_t = 8192;
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
     const TARGET: libc::rlim_t = 65536;
     unsafe {
         let mut rlim = libc::rlimit {

@@ -4,7 +4,7 @@
 //! They back both a toggle (`/voice`, `Ctrl+Shift+M`) and true push-to-talk (F12 hold), hence the `Ptt*` names.
 //! A press may be followed by a release after a long hold or, for a toggle, a later stop.
 
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use std::collections::VecDeque;
 
 use tokio::sync::mpsc;
@@ -14,7 +14,7 @@ use crate::auth::SharedVoiceAuth;
 use crate::config::VoiceConfig;
 use crate::error::VoiceError;
 use crate::event::VoiceEvent;
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 use crate::stt::{StreamingSttEvent, StreamingSttSession};
 
 /// Commands from the pager event loop (toggle start/stop, or F12 push-to-talk).
@@ -46,16 +46,22 @@ pub async fn run_voice_pipeline(
         match cmd {
             VoiceCommand::Shutdown => break,
             VoiceCommand::PttPress => {
-                // Aborting drops the old reader's capture and STT session, releasing the mic and socket at once (The pager always sends
-                // a `PttRelease` between presses, so an `active` session is one that's stopping, never a live duplicate.). We don't join
-                // the old reader, so its stream may still be releasing as the new one opens; cpal handles that brief overlap
+                // Supersede any prior session (including one still draining its trailing final after a `PttRelease`) rather than ignoring the press
+                // A rapid stop-then-start would otherwise be dropped here while the pager already flipped to "listening"
+                // That leaves a dead mic behind a recording UI and lets the old session's final land on the new target
+                // Aborting drops the old reader's capture and STT session, releasing the mic and socket at once
+                // (The pager always sends a `PttRelease` between presses, so an `active` session is one that's stopping, never a live duplicate.)
+                // We don't join the old reader, so its stream may still be releasing as the new one opens; cpal handles that brief overlap
                 if let Some(prev) = active.take() {
                     prev.reader.abort();
                 }
 
+                // Connect and device-open take hundreds of ms
+                // Race them against the next command so a release/stop (or shutdown) arriving mid-connect cancels the start
                 // Otherwise a quick tap-and-release would open a hot mic and append a spurious final after the user already let go
-                // `biased` polls the start first so a just-completed session is always kept (dropping it would leak its reader). The
-                // concurrent mic-open still completes, but its handle is then dropped, releasing the device right away
+                // `biased` polls the start first so a just-completed session is always kept (dropping it would leak its reader)
+                // Dropping an unfinished start cancels the connect
+                // The concurrent mic-open still completes, but its handle is then dropped, releasing the device right away
                 tokio::select! {
                     biased;
                     session = open_session(&config, &auth, &event_tx) => {
@@ -109,7 +115,7 @@ async fn open_session(
     }
 }
 
-#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+#[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd"))))]
 async fn start_capture_session(
     _config: &VoiceConfig,
     _auth: &SharedVoiceAuth,
@@ -123,13 +129,16 @@ async fn start_capture_session(
 /// Hard cap on the pre-connect PCM backlog (memory safety).
 /// Sized far above any real connect: the STT connect timeout aborts long before this is reached.
 /// In practice it never drops; it only bounds a pathological hang.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 const BACKLOG_MAX_CHUNKS: usize = 1024;
 
-/// Until `audio_tx_rx` yields the live STT sender, captured chunks accumulate in a bounded backlog, so the mic never
-/// backpressures during connect. Once the sender arrives the backlog is flushed in order and capture streams live.
+/// Bridge mic PCM into the STT socket across the connect handshake.
+///
+/// Until `audio_tx_rx` yields the live STT sender, captured chunks accumulate in a bounded backlog, so the mic never backpressures during connect.
+/// Once the sender arrives the backlog is flushed in order and capture streams live.
 /// Holding the sender also defers the writer's `audio.done` until the backlog is drained on teardown.
-#[cfg(feature = "audio")]
+/// Returns when the mic stops (`mic_rx` closed), the socket goes away (`audio_tx` closed), or connect fails (`audio_tx_rx` dropped).
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 async fn forward_pcm(
     mut mic_rx: mpsc::Receiver<Vec<u8>>,
     mut audio_tx_rx: tokio::sync::oneshot::Receiver<mpsc::Sender<Vec<u8>>>,
@@ -168,12 +177,12 @@ async fn forward_pcm(
 
 /// How long a session may run without any transcript before it is torn down (instead of streaming a dead mic until the user gives up).
 /// The first transcript disarms it, so long dictation with pauses is unaffected.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 const NO_SPEECH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// Message and permission guidance for a session torn down by [`NO_SPEECH_TIMEOUT`].
 /// A denied grant is indistinguishable from not speaking because macOS may return silence instead of an error.
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 fn no_speech_error() -> (String, Option<String>) {
     (
         "No speech was detected. Voice stopped.".to_owned(),
@@ -181,7 +190,7 @@ fn no_speech_error() -> (String, Option<String>) {
     )
 }
 
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 async fn start_capture_session(
     config: &VoiceConfig,
     auth: &SharedVoiceAuth,
@@ -239,9 +248,11 @@ async fn start_capture_session(
         // Tear down when no transcript arrives within the timeout; the first transcript disarms this
         let no_speech_deadline = tokio::time::Instant::now() + NO_SPEECH_TIMEOUT;
         let mut awaiting_speech = true;
-        // Stitch those deltas into the live preview so a long pauseless utterance keeps accumulating instead of resetting to the
-        // latest ~3s chunk. The committed prompt text only ever comes from `speech_final`. The server produces that as a clean
-        // one-pass re-transcription of the whole turn, better than stitched deltas. The prefix resets on each `speech_final`
+        // Chunk-final (`is_final && !speech_final`) text is locked: the server sends it as a delta of the turn
+        // Stitch those deltas into the live preview so a long pauseless utterance keeps accumulating instead of resetting to the latest ~3s chunk
+        // The committed prompt text only ever comes from `speech_final`
+        // The server produces that as a clean one-pass re-transcription of the whole turn, better than stitched deltas
+        // The prefix resets on each `speech_final`
         let mut locked_prefix = String::new();
         loop {
             tokio::select! {

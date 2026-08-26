@@ -80,7 +80,7 @@ impl DisplayServer {
         match HostOs::current() {
             HostOs::Macos => Self::Quartz,
             HostOs::Windows => Self::Win32,
-            HostOs::Linux => {
+            HostOs::Linux | HostOs::Other => {
                 if env.get("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty()) {
                     Self::Wayland
                 } else if env.get("DISPLAY").is_some_and(|v| !v.is_empty()) {
@@ -89,7 +89,6 @@ impl DisplayServer {
                     Self::Unknown
                 }
             }
-            HostOs::Other => Self::Unknown,
         }
     }
 }

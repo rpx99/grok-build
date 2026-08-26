@@ -122,7 +122,10 @@ pub fn native_clipboard_preflight(
             DisplayServer::Quartz | DisplayServer::Win32 => NativeClipboardPreflight::Unavailable,
         },
         HostOs::Macos | HostOs::Windows => NativeClipboardPreflight::LocalAvailable,
-        HostOs::Other => NativeClipboardPreflight::Unavailable,
+        HostOs::Other => match environment.display_server {
+            DisplayServer::X11 => NativeClipboardPreflight::LocalAvailable,
+            _ => NativeClipboardPreflight::Unavailable,
+        },
     }
 }
 

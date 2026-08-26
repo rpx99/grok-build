@@ -42,19 +42,30 @@ const PW_HELP_TIMEOUT: Duration = Duration::from_secs(2);
 #[derive(Clone, Copy, Debug)]
 enum Recorder {
     /// PipeWire's `pw-record`.
+    #[cfg(not(target_os = "openbsd"))]
     PwRecord,
     /// PulseAudio's `parec`.
+    #[cfg(not(target_os = "openbsd"))]
     Parec,
     /// ALSA's `arecord` (alsa-utils).
+    #[cfg(not(target_os = "openbsd"))]
     Arecord,
+    /// OpenBSD sndio `aucat` (base system).
+    #[cfg(target_os = "openbsd")]
+    Aucat,
 }
 
 impl Recorder {
     fn program(self) -> &'static str {
         match self {
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::PwRecord => "pw-record",
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::Parec => "parec",
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::Arecord => "arecord",
+            #[cfg(target_os = "openbsd")]
+            Recorder::Aucat => "aucat",
         }
     }
 
@@ -63,6 +74,7 @@ impl Recorder {
     fn args(self, rate: u32) -> Vec<String> {
         let rate = rate.to_string();
         match self {
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::PwRecord => vec![
                 // Without `--raw`, `pw-record` treats `--format`/`--rate`/`--channels` as a libsndfile container subformat
                 // It then wraps stdout in a container: WAV before PipeWire 1.6, AU with a header on 1.6 and later
@@ -77,12 +89,14 @@ impl Recorder {
                 "s16".into(),
                 "-".into(),
             ],
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::Parec => vec![
                 "--raw".into(),
                 "--format=s16le".into(),
                 format!("--rate={rate}"),
                 "--channels=1".into(),
             ],
+            #[cfg(not(target_os = "openbsd"))]
             Recorder::Arecord => vec![
                 "-q".into(),
                 "-t".into(),
@@ -93,6 +107,19 @@ impl Recorder {
                 "1".into(),
                 "-r".into(),
                 rate,
+                "-".into(),
+            ],
+            #[cfg(target_os = "openbsd")]
+            Recorder::Aucat => vec![
+                "-h".into(),
+                "raw".into(),
+                "-e".into(),
+                "s16le".into(),
+                "-c".into(),
+                "1".into(),
+                "-r".into(),
+                rate,
+                "-o".into(),
                 "-".into(),
             ],
         }
@@ -109,23 +136,34 @@ fn candidate_recorders(
     available: impl Fn(&str) -> bool,
     pw_record_supports_raw: impl Fn() -> bool,
 ) -> Vec<Recorder> {
-    let pw_available = available("pw-record");
-    let pw_leads = pw_available && pw_record_supports_raw();
-
-    let mut recorders = Vec::with_capacity(3);
-    if pw_leads {
-        recorders.push(Recorder::PwRecord);
+    #[cfg(target_os = "openbsd")]
+    {
+        let _ = (pw_record_supports_raw,);
+        return if available("aucat") {
+            vec![Recorder::Aucat]
+        } else {
+            Vec::new()
+        };
     }
-    if available("parec") {
-        recorders.push(Recorder::Parec);
+    #[cfg(not(target_os = "openbsd"))]
+    {
+        let pw_available = available("pw-record");
+        let pw_leads = pw_available && pw_record_supports_raw();
+        let mut recorders = Vec::with_capacity(3);
+        if pw_leads {
+            recorders.push(Recorder::PwRecord);
+        }
+        if available("parec") {
+            recorders.push(Recorder::Parec);
+        }
+        if available("arecord") {
+            recorders.push(Recorder::Arecord);
+        }
+        if pw_available && !pw_leads {
+            recorders.push(Recorder::PwRecord);
+        }
+        recorders
     }
-    if available("arecord") {
-        recorders.push(Recorder::Arecord);
-    }
-    if pw_available && !pw_leads {
-        recorders.push(Recorder::PwRecord);
-    }
-    recorders
 }
 
 /// Whether `name` resolves to an executable regular file on any `PATH` entry (so a stray non-executable file can't shadow a working recorder).
@@ -197,9 +235,14 @@ fn require_recorders(
     let recorders = candidate_recorders(&available, &pw_record_supports_raw);
     if recorders.is_empty() {
         return Err(VoiceError::Config(
-            "no microphone recorder found on PATH: install pipewire (pw-record), \
-             pulseaudio-utils (parec), or alsa-utils (arecord)"
-                .into(),
+            if cfg!(target_os = "openbsd") {
+                "no microphone recorder found: aucat (sndio, OpenBSD base) is missing from PATH"
+                    .into()
+            } else {
+                "no microphone recorder found on PATH: install pipewire (pw-record), \
+                 pulseaudio-utils (parec), or alsa-utils (arecord)"
+                    .into()
+            },
         ));
     }
     Ok(recorders)
@@ -407,6 +450,7 @@ pub fn capture_pcm_for_duration(
 mod tests {
     use super::*;
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn arecord_args_are_raw_s16_mono() {
         let args = Recorder::Arecord.args(16_000);
@@ -422,6 +466,7 @@ mod tests {
         assert_eq!(args.last().unwrap(), "-");
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn parec_and_pw_args_carry_rate_format_and_mono() {
         let parec = Recorder::Parec.args(24_000);
@@ -450,6 +495,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn recorder_preference_is_pipewire_then_pulse_then_alsa() {
         let all = candidate_recorders(|_| true, || true);
@@ -468,6 +514,7 @@ mod tests {
         assert!(matches!(alsa_only.as_slice(), [Recorder::Arecord]));
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn old_pipewire_is_demoted_below_pulse_and_alsa() {
         // pw-record present but `--raw` unsupported: it ranks last so parec is tried first, but it is not dropped
@@ -479,6 +526,7 @@ mod tests {
         ));
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn sole_pipewire_stays_a_candidate_when_probe_says_no_raw() {
         // The only recorder on PATH is a pw-record the probe rejects: still offer it so first_success can spawn-test it
@@ -493,6 +541,7 @@ mod tests {
         assert!(config_message(err).contains("no microphone recorder"));
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn first_success_returns_first_ok_and_skips_later_candidates() {
         let candidates = [Recorder::PwRecord, Recorder::Parec, Recorder::Arecord];
@@ -506,6 +555,7 @@ mod tests {
         assert_eq!(value, 7);
     }
 
+    #[cfg(not(target_os = "openbsd"))]
     #[test]
     fn first_success_reports_every_failure_when_all_fail() {
         let candidates = [Recorder::PwRecord, Recorder::Parec];
@@ -513,5 +563,29 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("pw-record failed"));
         assert!(err.contains("parec failed"));
+    }
+
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    fn aucat_args_are_raw_s16le_mono_stdout() {
+        let args = Recorder::Aucat.args(16_000);
+        assert!(args.contains(&"raw".to_string()));
+        assert!(args.contains(&"s16le".to_string()));
+        let c = args.iter().position(|a| a == "-c").unwrap();
+        assert_eq!(args[c + 1], "1");
+        let r = args.iter().position(|a| a == "-r").unwrap();
+        assert_eq!(args[r + 1], "16000");
+        assert_eq!(args[args.len() - 2], "-o");
+        assert_eq!(args.last().unwrap(), "-");
+    }
+
+    #[cfg(target_os = "openbsd")]
+    #[test]
+    fn openbsd_prefers_aucat() {
+        assert!(matches!(
+            candidate_recorders(|_| true, || true).as_slice(),
+            [Recorder::Aucat]
+        ));
+        assert!(candidate_recorders(|_| false, || true).is_empty());
     }
 }

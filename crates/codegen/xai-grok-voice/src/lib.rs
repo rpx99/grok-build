@@ -7,7 +7,7 @@
 //! the long-lived TUI never pays the platform audio stack's permanent memory
 //! cost (see [`audio`] and [`maybe_run_capture_subprocess`]).
 
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub mod audio;
 pub mod auth;
 pub mod config;
@@ -27,7 +27,7 @@ pub use language::{
     language_for_api, stt_language_by_code,
 };
 pub use pipeline::{VoiceCommand, run_voice_pipeline};
-#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub use probe::run_mic_only_probe;
 pub use probe::{
     InputDeviceInfo, VoiceProbeOptions, VoiceProbeReport, format_probe_report, input_device_info,
@@ -38,7 +38,8 @@ pub use probe::{
 /// Production CLI builds enable it on every OS: macOS/Windows link `cpal`
 /// (coreaudio/wasapi), while Linux shells out to a system recorder
 /// (`pw-record`/`parec`/`arecord`) so the static-musl binary links no audio
-/// library. Bazel builds drop `audio` (no capture in the test sandbox).
+/// library. OpenBSD uses the same subprocess path with `aucat` (sndio).
+/// Bazel builds drop `audio` (no capture in the test sandbox).
 ///
 /// On Linux a `true` value means capture is *compiled in*; whether a recorder
 /// is actually installed is reported when a session starts. Consumers gate voice

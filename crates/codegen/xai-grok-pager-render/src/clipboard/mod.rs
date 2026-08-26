@@ -168,8 +168,12 @@ fn resolve_clipboard_route_with(ctx: &TerminalContext, opts: ClipboardRouteOpts)
     // the sequence to the real clipboard.
     // `GROK_CLIPBOARD_NO_OSC52` wins over every automatic path.
     let osc52 = !opts.no_osc52
-        && (cfg!(target_os = "linux")
-            || is_tmux
+        && (cfg!(any(
+            target_os = "linux",
+            target_os = "openbsd",
+            target_os = "freebsd",
+            target_os = "netbsd"
+        )) || is_tmux
             || is_remote()
             || is_container_no_display()
             || opts.wrap_sink);
@@ -749,8 +753,13 @@ pub fn system_clipboard_get() -> Option<String> {
     system_clipboard_read_text().ok().flatten()
 }
 
-/// Read X11 PRIMARY text for an unmodified Linux middle-button press.
-#[cfg(target_os = "linux")]
+/// Read X11 PRIMARY text for an unmodified middle-button press.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 pub fn system_primary_selection_get() -> Option<String> {
     #[cfg(any(test, feature = "test-support"))]
     if let Some(available) = test_support::hook_x11_primary_available() {
@@ -771,19 +780,35 @@ pub fn system_primary_selection_get() -> Option<String> {
         .filter(|text| !text.is_empty())
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(
+    test,
+    target_os = "linux",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 fn is_native_x11(display_server: crate::host::DisplayServer) -> bool {
     display_server == crate::host::DisplayServer::X11
 }
 
 /// Runtime X11 gate for empty Ctrl+V guidance.
 pub fn x11_primary_guidance_available() -> bool {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
     {
         is_native_x11(crate::host::DisplayServer::current())
             && xai_grok_shared::clipboard::x11_display_env_present()
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
     {
         false
     }

@@ -1494,6 +1494,14 @@ fn test_needs_update_downgrade_stable_blocked_when_disallowed() {
 }
 
 #[test]
+fn test_tui_restart_hint_never_advertises_older_stable_pointer() {
+    // Source/ports builds sit ahead of the CDN pointer (e.g. 1.0.8 vs 1.0.5).
+    // The in-TUI hint uses allow_downgrade=false so this is not an "update".
+    assert_eq!(needs_update("1.0.8", "1.0.5", "stable", false), Some(false));
+    assert_eq!(needs_update("1.0.4", "1.0.5", "stable", false), Some(true));
+}
+
+#[test]
 fn test_needs_update_downgrade_alpha_when_allowed() {
     // Alpha rollback: pointer moved backward.
     assert_eq!(needs_update("0.2.7", "0.2.5", "alpha", true), Some(true));

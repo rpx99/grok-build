@@ -52,7 +52,7 @@ async fn run() -> anyhow::Result<()> {
     eprintln!("Speak now...\n");
 
     if args.mic_only {
-        #[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+        #[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
         {
             let (bytes, chunks) =
                 xai_grok_voice::run_mic_only_probe(config.sample_rate, args.seconds)?;
@@ -62,7 +62,7 @@ async fn run() -> anyhow::Result<()> {
             }
             return Ok(());
         }
-        #[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows"))))]
+        #[cfg(any(not(feature = "audio"), not(any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd"))))]
         anyhow::bail!("built without `audio` feature");
     }
 

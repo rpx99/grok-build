@@ -13,8 +13,9 @@
 #   ./scripts/openbsd-mkpackage.sh -ip        # alles zusammen
 #   ./scripts/openbsd-mkpackage.sh -i 1.0.9   # Version explizit vorgeben
 #
-# Ueberschreibbar per Env: GROK_PORTS_BASE, DISTDIR, WRKOBJDIR, PACKAGES,
-# PORTDIR, PORTSDIR, MAINTAINER, DRY_RUN=1
+# Ueberschreibbar per Env: GROK_PORTS_BASE, DISTDIR, WRKOBJDIR,
+# PACKAGE_REPOSITORY (oder historisch PACKAGES), PLIST_REPOSITORY, PORTTREE,
+# PORTSDIR, MAINTAINER, DRY_RUN=1
 set -eu
 
 DRY=${DRY_RUN:-0}
@@ -28,6 +29,35 @@ run() {
 	if [ "$DRY" = 1 ]; then echo "[dry] $*"; else "$@"; fi
 }
 
+usage() {
+	cat <<EOF
+usage: $(basename "$0") [-h] [--check] [-i] [-p] [-ip] [VERSION]
+
+Baut grok-build-VERSION.tgz aus dem lokalen Repo-Stand - ohne root.
+Nur die optionale Installation mit pkg_add braucht doas.
+
+Optionen:
+  -h, --help   diese Hilfe
+  --check      nur vergleichen: lokaler Stand vs. origin/main
+  -i           nach dem Bau mit pkg_add installieren
+  -p           nach dem Bau committen und auf den Fork pushen
+  -ip, -pi     -i und -p zusammen
+  VERSION      z.B. 1.0.8 (sonst aus Cargo.toml)
+
+Umgebung:
+  DRY_RUN=1              nur anzeigen, nichts schreiben
+  GROK_PORTS_BASE        Default: ~/.grok-ports
+  DISTDIR, WRKOBJDIR, PACKAGE_REPOSITORY, PLIST_REPOSITORY
+  PORTTREE, PORTSDIR, MAINTAINER
+
+Beispiele:
+  $0                 nur bauen
+  $0 -i              bauen und installieren
+  $0 --check
+  $0 -i 1.0.8
+EOF
+}
+
 ver_of() {
 	awk '/^version/ {gsub(/"/, "", $3); print $3; exit}' "$1"
 }
@@ -38,7 +68,8 @@ REPO=$(git rev-parse --show-toplevel 2>/dev/null) \
 BASE=${GROK_PORTS_BASE:-$HOME/.grok-ports}
 DISTDIR=${DISTDIR:-$BASE/distfiles}
 WRKOBJDIR=${WRKOBJDIR:-$BASE/wrk}
-PACKAGES=${PACKAGES:-$BASE/packages}
+PACKAGE_REPOSITORY=${PACKAGE_REPOSITORY:-${PACKAGES:-$BASE/packages}}
+PLIST_REPOSITORY=${PLIST_REPOSITORY:-$BASE/plist}
 PORTSDIR=${PORTSDIR:-/usr/ports}
 # User-eigener Ports-Baum im "mystuff"-Stil: <tree>/devel/grok-build,
 # wird per PORTSDIR_PATH vor /usr/ports durchsucht.
@@ -48,18 +79,19 @@ MODE=build
 V_OVERRIDE=""
 while [ $# -gt 0 ]; do
 	case "$1" in
+	-h|--help)	usage; exit 0 ;;
 	--check)	MODE=check ;;
 	-i)		INSTALL_AFTER=1 ;;
 	-p)		PUSH_AFTER=1 ;;
 	-ip|-pi)	INSTALL_AFTER=1; PUSH_AFTER=1 ;;
-	-.*)		echo "FEHLER: unbekannte Option '$1'"; exit 1 ;;
-	-*)		echo "FEHLER: unbekannte Option '$1'"; exit 1 ;;
+	-.*)		echo "FEHLER: unbekannte Option '$1'" >&2; usage >&2; exit 1 ;;
+	-*)		echo "FEHLER: unbekannte Option '$1'" >&2; usage >&2; exit 1 ;;
 	*)		V_OVERRIDE=$1 ;;
 	esac
 	shift
 done
 
-V=${1:-$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")}
+V=${V_OVERRIDE:-$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")}
 [ -n "$V" ] || { echo "FEHLER: Version nicht ermittelbar (Parameter angeben)"; exit 1; }
 
 for tool in git rustc protoc pkg-config make awk grep pax; do
@@ -92,7 +124,21 @@ echo "==> Verzeichnisse: PORTTREE=$PORTTREE DISTDIR=$DISTDIR"
 LIST=$(mktemp)
 trap 'rm -f "$LIST"' EXIT INT TERM
 (cd "$REPO" && git ls-files -co --exclude-standard \
-	| grep -vE '(^|/)([^/]*\.core|core|\+[^/]*)$') >"$LIST"
+	| grep -vE '(^|/)([^/]*\.core|core|\+[^/]*)$' \
+	| while IFS= read -r file; do
+		if [ -e "$file" ] || [ -L "$file" ]; then
+			printf '%s\n' "$file"
+		fi
+	done) >"$LIST"
+
+# Ein Dry-Run darf weder den Workdir loeschen noch die eingecheckten
+# Port-Metadaten ueberschreiben oder leeren.
+if [ "$DRY" = 1 ]; then
+	echo "[dry] pax -w -z -f $DISTDIR/grok-build-$V.tar.gz  (< Dateiliste, Prefix grok-build-$V/)"
+	echo "[dry] Port-Skelett unter $PORTTREE/devel/grok-build erzeugen"
+	echo "[dry] modcargo-gen-crates, makesum und package ausfuehren"
+	exit 0
+fi
 
 # Alte Build-Reste wegwerfen: Extraktion muss IMMER dem aktuellen Tarball
 # entsprechen (Cookie-Timestamps truegen sonst bei geaendertem Inhalt).
@@ -100,19 +146,52 @@ rm -rf "${WRKOBJDIR:?}/grok-build-$V"
 
 mkdir -p "$DISTDIR"
 if [ "$DRY" = 1 ]; then
-	echo "[dry] pax -w -z -f $DISTDIR/grok-build-$V.tar.gz  (< Dateiliste)"
+	echo "[dry] pax -w -z -f $DISTDIR/grok-build-$V.tar.gz  (< Dateiliste, Prefix grok-build-$V/)"
 else
-	(cd "$REPO" && pax -w -z -x ustar -f "$DISTDIR/grok-build-$V.tar.gz" <"$LIST")
+	(cd "$REPO" && pax -w -z -x ustar -s ",^,grok-build-$V/," -f "$DISTDIR/grok-build-$V.tar.gz" <"$LIST")
 fi
 
 # 2. Port-Skelett schreiben (im Repo, user-eigen, Kategorie-Layout)
 PORTDIR="$PORTTREE/devel/grok-build"
-mkdir -p "$PORTDIR/pkg"
+mkdir -p "$PORTDIR/pkg" "$PORTDIR/files"
+
+cat >"$PORTDIR/files/fix-execonly.pl" <<'EOF'
+#!/usr/bin/perl
+# Mark execute-only PT_LOAD segments as readable (PF_R|PF_X).
+# rustc/lld on OpenBSD amd64 emit PF_X-only .text; aws-lc-sys s2n-bignum
+# stores constants there, so a load SIGSEGVs. No-op if already R+E.
+use strict;
+use warnings;
+
+my $path = shift or die "usage: $0 <elf>\n";
+open my $f, '+<', $path or die "$path: $!\n";
+binmode $f;
+read($f, my $ehdr, 64) == 64 or die "$path: short ELF header\n";
+my $magic = substr($ehdr, 0, 4);
+die "$path: not ELF\n" unless $magic eq "\x7fELF";
+my $phoff     = unpack('Q', substr($ehdr, 32, 8));
+my $phentsize = unpack('v', substr($ehdr, 54, 2));
+my $phnum     = unpack('v', substr($ehdr, 56, 2));
+my $n = 0;
+for (my $i = 0; $i < $phnum; $i++) {
+	seek $f, $phoff + $i * $phentsize, 0 or die $!;
+	read($f, my $ph, $phentsize) == $phentsize or die "$path: short PHDR\n";
+	my ($type, $flags) = unpack('VV', $ph);
+	next unless $type == 1 && $flags == 1;    # PT_LOAD && PF_X
+	substr($ph, 4, 4) = pack('V', 5);         # PF_R|PF_X
+	seek $f, $phoff + $i * $phentsize, 0 or die $!;
+	print $f $ph;
+	$n++;
+}
+print STDERR "$path: marked $n execute-only PT_LOAD segment(s) readable\n";
+EOF
+
 
 cat >"$PORTDIR/Makefile" <<EOF
 COMMENT =	SpaceXAI terminal AI coding agent (grok)
 V =		$V
 DISTNAME =	grok-build-\${V}
+DISTFILES =	\${DISTNAME}\${EXTRACT_SUFX}
 PKGNAME =	grok-build-\${V}
 CATEGORIES =	devel
 HOMEPAGE =	https://github.com/xai-org/grok-build
@@ -121,11 +200,22 @@ MAINTAINER =	$MAINTAINER
 # Apache-2.0
 PERMIT_PACKAGE =	Yes
 
-# Tarball enthaelt keinen Top-Level-Ordner -> direkt im WRKDIR bauen
-WRKSRC =	\${WRKDIR}
-
-WANTLIB +=	\${COMPILER_LIBCXX} c m pthread util z
+WANTLIB +=	\${COMPILER_LIBCXX} c crypto git2 llhttp m onig pcre2-8
+WANTLIB +=	pthread sqlite3 ssh2 ssl util z zstd
 COMPILER =	base-clang
+
+BUILD_DEPENDS +=	textproc/ripgrep
+RUN_DEPENDS +=	x11/xclip
+LIB_DEPENDS +=	archivers/zstd \
+		databases/sqlite3 \
+		devel/libgit2/libgit2 \
+		devel/pcre2 \
+		security/libssh2 \
+		textproc/oniguruma \
+		www/llhttp
+MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
+		GROK_SHELL_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
+		LIBGIT2_NO_VENDOR=1
 
 MODULES =	devel/cargo
 CONFIGURE_STYLE =	cargo
@@ -134,7 +224,17 @@ MODCARGO_BUILD_ARGS =	--bin xai-grok-pager
 
 do-install:
 	\${INSTALL_PROGRAM} \${MODCARGO_TARGET_DIR}/release/xai-grok-pager \${PREFIX}/bin/grok
+	perl \${FILESDIR}/fix-execonly.pl \${PREFIX}/bin/grok
 
+# aws-lc-sys / s2n-bignum stores constants in .text. OpenBSD amd64 maps
+# .text execute-only, which SIGSEGVs in curve25519_x25519base. rustc
+# goes through cc(1), so the flag must be -Wl,--no-execute-only.
+# AWS_LC_SYS_NO_ASM is not usable here: it forces the cmake builder and
+# panics on release (OPT_LEVEL != 0). Same workaround as devel/codex.
+.if \${MACHINE_ARCH} == "amd64"
+USE_NOEXECONLY =	Yes
+.endif
+MODCARGO_RUSTFLAGS +=	-Clink-arg=-Wl,--no-execute-only
 .include <bsd.port.mk>
 EOF
 
@@ -147,19 +247,31 @@ embedded in editors via ACP.
 Native OpenBSD source build of github.com/xai-org/grok-build.
 Authenticate with "grok login" or set XAI_API_KEY. State lives under
 ~/.grok/.
+
+This package is not managed by the xAI CDN auto-updater (official
+stable can lag the git tag). Use this port for upgrades, not
+`grok update`. Copy uses xclip(1) (RUN_DEPENDS). Default login.conf
+caps open files at 1024; grok raises the process soft limit toward
+that (or 8192 if the login class allows). It does not edit
+login.conf. To go higher, add a login class with openfiles-cur/max=8192.
 EOF
 
 cat >"$PORTDIR/pkg/PLIST" <<'EOF'
 @comment \$OpenBSD\$
+@owner root
+@group bin
 @bin bin/grok
 EOF
 
 : >"$PORTDIR/crates.inc"
+# distinfo ebenfalls wegwerfen: es referenziert die alten Cargo-Eintraege,
+# die die (noch leere) Liste bei NO_CHECKSUM als "Extra file" meldet.
+rm -f "$PORTDIR/distinfo"
 
 # 3. Port-Mechanik - alle Schreibpfade liegen beim Nutzer, kein root noetig.
 #    Variablen als MAKE-ARGUMENTE: Kommandozeile schlaegt auch /etc/mk.conf.
-MKVARS="PORTSDIR=$PORTSDIR PORTSDIR_PATH=$PORTTREE:$PORTSDIR:$PORTSDIR/mystuff WRKOBJDIR=$WRKOBJDIR LOCKDIR=$BASE/locks DISTDIR=$DISTDIR PACKAGES=$PACKAGES"
-mkdir -p "$BASE/locks"
+MKVARS="PORTSDIR=$PORTSDIR PORTSDIR_PATH=$PORTTREE:$PORTSDIR:$PORTSDIR/mystuff WRKOBJDIR=$WRKOBJDIR LOCKDIR=$BASE/locks DISTDIR=$DISTDIR PACKAGE_REPOSITORY=$PACKAGE_REPOSITORY PLIST_REPOSITORY=$PLIST_REPOSITORY"
+mkdir -p "$BASE/locks" "$PLIST_REPOSITORY"
 
 # 3b. Crate-Liste aus Cargo.lock generieren (erster Lauf ohne Checksummen),
 #     dann laedt makesum alle Crates und schreibt die Pruefsummen.
@@ -171,14 +283,27 @@ else
 	grep '^MODCARGO_CRATES' "$LIST" >"$PORTDIR/crates.inc"
 	[ -s "$PORTDIR/crates.inc" ] \
 		|| { echo "FEHLER: keine Crates in Cargo.lock erkannt"; exit 1; }
+	echo "==> crates.inc: $(grep -c . "$PORTDIR/crates.inc") Crates"
 fi
 run make $MKVARS makesum
+echo "==> distinfo: $(grep -c 'SHA256' "$PORTDIR/distinfo" 2>/dev/null || echo 0) Checksummen"
 # Crates sind jetzt komplett da -> Workdir verwerfen, damit das folgende
-# 'package' sie frisch extrahiert (sonst leert der alte Cookie den Vendor-Dir)
+# 'package' sie frisch extrahiert (sonst leert der alte Cookie den Vendor-Dir).
+# Das vorhandene .tgz IST der Ports-Cookie (_PACKAGE_COOKIE): ohne Loeschen
+# macht 'make package' nur "Link to .../ftp/..." und baut nicht neu.
 rm -rf "${WRKOBJDIR:?}/grok-build-$V"
+if [ "$DRY" != 1 ] && [ -d "$PACKAGE_REPOSITORY" ]; then
+	find "$PACKAGE_REPOSITORY" -name "grok-build-$V.tgz" -print -delete
+fi
 run make $MKVARS package
 
-PKG=$(ls -t "$PACKAGES"/*/grok-build-"$V".tgz 2>/dev/null | head -1 || true)
+PKG=""
+for f in "$PACKAGE_REPOSITORY"/*/all/grok-build-"$V".tgz; do
+	if [ -f "$f" ]; then
+		PKG=$f
+		break
+	fi
+done
 if [ -z "$PKG" ] && [ "$DRY" != 1 ]; then
 	echo "FEHLER: fertiges Paket nicht gefunden (make-Ausgabe oben pruefen)"; exit 1
 fi
@@ -221,15 +346,22 @@ if [ "$PUSH_AFTER" = 1 ] && [ "$DRY" != 1 ]; then
 	fi
 fi
 
-# 5. Optional installieren - pkg_add ist Systemverwaltung und braucht doas
+# 5. Optional installieren - pkg_add ist Systemverwaltung und braucht doas.
+#    -u interpretiert Argumente als installierte PaketNAMEN, nicht als
+#    Dateipfad. -r ersetzt das vorhandene Paket, -D unsigned erlaubt das
+#    unsignierte Lokal-tgz, -D updatedepends toleriert Ports-Index vs.
+#    installierte Abhaengigkeitsversionen (libgit2/llhttp Snapshot-Lag).
 if [ "$INSTALL_AFTER" = 1 ] && [ "$DRY" != 1 ]; then
 	if [ "$(id -u)" = 0 ]; then
-		pkg_add -Ur -D unsigned "$PKG"
+		pkg_add -r -D unsigned -D updatedepends "$PKG"
 	else
 		if command -v doas >/dev/null 2>&1; then
-			doas pkg_add -Ur -D unsigned "$PKG"
+			doas pkg_add -r -D unsigned -D updatedepends "$PKG"
 		else
-			sudo pkg_add -Ur -D unsigned "$PKG"
+			sudo pkg_add -r -D unsigned -D updatedepends "$PKG"
 		fi
 	fi
+else
+	echo "==> Installieren (nicht -u mit Dateipfad!):"
+	echo "    doas pkg_add -r -D unsigned -D updatedepends $PKG"
 fi

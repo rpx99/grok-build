@@ -15,15 +15,15 @@
 #
 # Ueberschreibbar per Env: GROK_PORTS_BASE, DISTDIR, WRKOBJDIR,
 # PACKAGE_REPOSITORY (oder historisch PACKAGES), PLIST_REPOSITORY, PORTTREE,
-# PORTSDIR, MAINTAINER, DRY_RUN=1
+# PORTSDIR, MAINTAINER, FORK_URL, UPSTREAM_URL, DRY_RUN=1
 set -eu
 
 DRY=${DRY_RUN:-0}
 MAINTAINER=${MAINTAINER:-Your Name <you@example.invalid>}
 INSTALL_AFTER=0
 PUSH_AFTER=0
-FORK_URL=https://github.com/rpx99/grok-build.git
-UPSTREAM_URL=https://github.com/xai-org/grok-build.git
+FORK_URL=${FORK_URL:-}
+UPSTREAM_URL=${UPSTREAM_URL:-https://github.com/xai-org/grok-build.git}
 
 run() {
 	if [ "$DRY" = 1 ]; then echo "[dry] $*"; else "$@"; fi
@@ -48,7 +48,7 @@ Umgebung:
   DRY_RUN=1              nur anzeigen, nichts schreiben
   GROK_PORTS_BASE        Default: ~/.grok-ports
   DISTDIR, WRKOBJDIR, PACKAGE_REPOSITORY, PLIST_REPOSITORY
-  PORTTREE, PORTSDIR, MAINTAINER
+  PORTTREE, PORTSDIR, MAINTAINER, FORK_URL, UPSTREAM_URL
 
 Beispiele:
   $0                 nur bauen
@@ -95,7 +95,7 @@ V=${V_OVERRIDE:-$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")}
 [ -n "$V" ] || { echo "FEHLER: Version nicht ermittelbar (Parameter angeben)"; exit 1; }
 
 if [ "$MODE" = check ]; then
-	# origin is the fork (rpx99). New xAI syncs land on upstream/main.
+	# origin is the fork. New xAI syncs land on upstream/main.
 	if ! git -C "$REPO" remote get-url upstream >/dev/null 2>&1; then
 		git -C "$REPO" remote add upstream "$UPSTREAM_URL"
 	fi
@@ -332,16 +332,34 @@ echo "==> Paket: ${PKG:-<dry-run>}"
 # 4. Optional: Stand committen und auf den eigenen Fork pushen
 if [ "$PUSH_AFTER" = 1 ] && [ "$DRY" != 1 ]; then
 	cd "$REPO"
-	# Remotes sicherstellen: origin=Fork, upstream=xai-org
-	if git remote get-url origin >/dev/null 2>&1; then
-		case "$(git remote get-url origin)" in
-		*rpx99/grok-build*)	: ;;
-		*)	git remote get-url upstream >/dev/null 2>&1 \
-				|| git remote rename origin upstream ;;
+	# Remotes sicherstellen: origin=Fork, upstream=xai-org. Ein vorhandenes
+	# origin, das nicht xai-org ist, gilt als Fork und braucht kein FORK_URL.
+	if ORIGIN_URL=$(git remote get-url origin 2>/dev/null); then
+		case "$ORIGIN_URL" in
+		*github.com/xai-org/grok-build*)
+			if git remote get-url upstream >/dev/null 2>&1; then
+				[ -n "$FORK_URL" ] || {
+					echo "FEHLER: origin zeigt auf xai-org; FORK_URL fuer den eigenen Fork setzen." >&2
+					exit 1
+				}
+				git remote set-url origin "$FORK_URL"
+			else
+				git remote rename origin upstream
+				ORIGIN_URL=""
+			fi
+			;;
 		esac
+	else
+		ORIGIN_URL=""
 	fi
-	git remote get-url origin >/dev/null 2>&1 \
-		|| git remote add origin "$FORK_URL"
+	if ! git remote get-url origin >/dev/null 2>&1; then
+		[ -n "$FORK_URL" ] || {
+			echo "FEHLER: kein Fork als origin; FORK_URL setzen." >&2
+			exit 1
+		}
+		git remote add origin "$FORK_URL"
+	fi
+	FORK_URL=$(git remote get-url origin)
 	git remote get-url upstream >/dev/null 2>&1 \
 		|| git remote add upstream "$UPSTREAM_URL"
 
@@ -360,8 +378,8 @@ if [ "$PUSH_AFTER" = 1 ] && [ "$DRY" != 1 ]; then
 	fi
 	echo "==> Push auf $FORK_URL ..."
 	if ! git push origin main; then
-		echo "HINWEIS: Push fehlgeschlagen. Fork existiert? Einmalig anlegen:" >&2
-		echo "  https://github.com/xai-org/grok-build/fork  (Account rpx99 waehlen)" >&2
+		echo "HINWEIS: Push fehlgeschlagen. Fork anlegen und als origin konfigurieren:" >&2
+		echo "  git remote set-url origin <URL-DES-EIGENEN-FORKS>" >&2
 	fi
 fi
 

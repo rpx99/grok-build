@@ -1,5 +1,5 @@
 COMMENT =	SpaceXAI terminal AI coding agent (grok)
-V =		1.0.8
+V =		1.0.10
 DISTNAME =	grok-build-${V}
 DISTFILES =	${DISTNAME}${EXTRACT_SUFX}
 PKGNAME =	grok-build-${V}

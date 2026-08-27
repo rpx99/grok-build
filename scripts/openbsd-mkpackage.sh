@@ -42,10 +42,13 @@ Optionen:
   -i           nach dem Bau mit pkg_add installieren
   -p           nach dem Bau committen und auf den Fork pushen
   -ip, -pi     -i und -p zusammen
-  VERSION      z.B. 1.0.8 (sonst aus Cargo.toml)
+  VERSION      z.B. 1.0.10 (sonst aus Cargo.toml)
 
 Umgebung:
   DRY_RUN=1              nur anzeigen, nichts schreiben
+  REVISION=0             Ports-REVISION (Paket 1.0.10p0). Leer = erste
+                         Ausgabe dieser Cargo-Version. Ungesetzt = auto
+                         (naechstes pN wenn Tag vVERSION-openbsd existiert)
   GROK_PORTS_BASE        Default: ~/.grok-ports
   DISTDIR, WRKOBJDIR, PACKAGE_REPOSITORY, PLIST_REPOSITORY
   PORTTREE, PORTSDIR, MAINTAINER, FORK_URL, UPSTREAM_URL
@@ -94,6 +97,29 @@ done
 V=${V_OVERRIDE:-$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")}
 [ -n "$V" ] || { echo "FEHLER: Version nicht ermittelbar (Parameter angeben)"; exit 1; }
 
+# Same Cargo version, new xAI dump: OpenBSD REVISION (1.0.10 -> 1.0.10p0).
+# Tag vX.Y.Z-openbsd is the first package; vX.Y.Z-openbsd.1 is p0, .2 is p1.
+PKG_REVISION=""
+if [ "${REVISION+x}" = x ]; then
+	PKG_REVISION=$REVISION
+else
+	git -C "$REPO" fetch origin --tags >/dev/null 2>&1 || true
+	if git -C "$REPO" rev-parse -q --verify "refs/tags/v${V}-openbsd" >/dev/null 2>&1; then
+		n=0
+		while git -C "$REPO" rev-parse -q --verify "refs/tags/v${V}-openbsd.$((n + 1))" >/dev/null 2>&1; do
+			n=$((n + 1))
+		done
+		PKG_REVISION=$n
+	fi
+fi
+if [ -z "$PKG_REVISION" ]; then
+	FULLPKG="grok-build-$V"
+	GH_TAG="v${V}-openbsd"
+else
+	FULLPKG="grok-build-${V}p${PKG_REVISION}"
+	GH_TAG="v${V}-openbsd.$((PKG_REVISION + 1))"
+fi
+
 if [ "$MODE" = check ]; then
 	# origin is the fork. New xAI syncs land on upstream/main.
 	if ! git -C "$REPO" remote get-url upstream >/dev/null 2>&1; then
@@ -123,6 +149,17 @@ if [ "$MODE" = check ]; then
 		if [ "$N" -gt 15 ]; then
 			echo "    ... ($N insgesamt)"
 		fi
+		if [ "$LV" = "$RV" ]; then
+			echo "==> Cargo-Version bleibt $RV (xAI bumpt nicht bei jedem Sync)."
+			LSR=$(git -C "$REPO" show HEAD:SOURCE_REV 2>/dev/null | tr -d '\n' || true)
+			USR=$(git -C "$REPO" show upstream/main:SOURCE_REV 2>/dev/null | tr -d '\n' || true)
+			if [ -n "$LSR" ] && [ -n "$USR" ] && [ "$LSR" != "$USR" ]; then
+				echo "    SOURCE_REV lokal    : $LSR"
+				echo "    SOURCE_REV xAI/main : $USR"
+			fi
+		else
+			echo "==> Cargo-Version $LV -> $RV"
+		fi
 		echo "Dann (nicht git pull — origin ist der Fork):"
 		echo "    git fetch upstream && git rebase upstream/main"
 		echo "    $0"
@@ -135,7 +172,7 @@ for tool in git rustc protoc pkg-config make awk grep pax; do
 done
 [ -d "$PORTSDIR" ] || { echo "FEHLER: $PORTSDIR existiert nicht (ports(7))"; exit 1; }
 
-echo "==> Version: $V"
+echo "==> Version: $V${PKG_REVISION:+p$PKG_REVISION}  (GitHub-Tag $GH_TAG)"
 echo "==> Verzeichnisse: PORTTREE=$PORTTREE DISTDIR=$DISTDIR"
 
 # 1. Quell-Tarball aus dem lokalen Stand (inkl. uncommitteter Aenderungen;
@@ -206,9 +243,15 @@ print STDERR "$path: marked $n execute-only PT_LOAD segment(s) readable\n";
 EOF
 
 
+REVISION_LINE=""
+if [ -n "$PKG_REVISION" ]; then
+	REVISION_LINE="REVISION =	$PKG_REVISION"
+fi
+
 cat >"$PORTDIR/Makefile" <<EOF
 COMMENT =	SpaceXAI terminal AI coding agent (grok)
 V =		$V
+$REVISION_LINE
 DISTNAME =	grok-build-\${V}
 DISTFILES =	\${DISTNAME}\${EXTRACT_SUFX}
 PKGNAME =	grok-build-\${V}
@@ -234,6 +277,7 @@ LIB_DEPENDS +=	archivers/zstd \
 		www/llhttp
 MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
 		GROK_SHELL_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
+		GROK_VERSION=\${V} \
 		LIBGIT2_NO_VENDOR=1
 
 MODULES =	devel/cargo
@@ -273,6 +317,8 @@ stable can lag the git tag). Use this port for upgrades, not
 caps open files at 1024; grok raises the process soft limit toward
 that (or 8192 if the login class allows). It does not edit
 login.conf. To go higher, add a login class with openfiles-cur/max=8192.
+xAI may ship a new monorepo dump under the same Cargo version; those
+rebuilds use REVISION (1.0.10p0) and grok --version shows SOURCE_REV.
 EOF
 
 cat >"$PORTDIR/pkg/PLIST" <<'EOF'
@@ -312,12 +358,12 @@ echo "==> distinfo: $(grep -c 'SHA256' "$PORTDIR/distinfo" 2>/dev/null || echo 0
 # macht 'make package' nur "Link to .../ftp/..." und baut nicht neu.
 rm -rf "${WRKOBJDIR:?}/grok-build-$V"
 if [ "$DRY" != 1 ] && [ -d "$PACKAGE_REPOSITORY" ]; then
-	find "$PACKAGE_REPOSITORY" -name "grok-build-$V.tgz" -print -delete
+	find "$PACKAGE_REPOSITORY" -name "$FULLPKG.tgz" -print -delete
 fi
 run make $MKVARS package
 
 PKG=""
-for f in "$PACKAGE_REPOSITORY"/*/all/grok-build-"$V".tgz; do
+for f in "$PACKAGE_REPOSITORY"/*/all/"$FULLPKG".tgz; do
 	if [ -f "$f" ]; then
 		PKG=$f
 		break
@@ -328,6 +374,7 @@ if [ -z "$PKG" ] && [ "$DRY" != 1 ]; then
 fi
 
 echo "==> Paket: ${PKG:-<dry-run>}"
+echo "==> GitHub-Tag: $GH_TAG"
 
 # 4. Optional: Stand committen und auf den eigenen Fork pushen
 if [ "$PUSH_AFTER" = 1 ] && [ "$DRY" != 1 ]; then

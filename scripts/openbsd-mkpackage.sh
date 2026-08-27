@@ -5,8 +5,8 @@
 # im Repo). Nur die optionale Installation mit pkg_add braucht doas.
 #
 # Aufruf bei einem neuen Release:
-#   ./scripts/openbsd-mkpackage.sh --check    # ist ein neuer xAI-Sync da?
-#   git pull                                  # dann holen
+#   ./scripts/openbsd-mkpackage.sh --check    # neuer Commit auf xai-org/grok-build?
+#   git fetch upstream && git rebase upstream/main   # xAI-Sync holen (nicht git pull)
 #   ./scripts/openbsd-mkpackage.sh            # nur bauen
 #   ./scripts/openbsd-mkpackage.sh -i         # bauen + installieren
 #   ./scripts/openbsd-mkpackage.sh -p         # bauen + committen + auf Fork pushen
@@ -38,7 +38,7 @@ Nur die optionale Installation mit pkg_add braucht doas.
 
 Optionen:
   -h, --help   diese Hilfe
-  --check      nur vergleichen: lokaler Stand vs. origin/main
+  --check      neuen xAI-Sync pruefen (upstream/main, nicht der Fork)
   -i           nach dem Bau mit pkg_add installieren
   -p           nach dem Bau committen und auf den Fork pushen
   -ip, -pi     -i und -p zusammen
@@ -94,27 +94,46 @@ done
 V=${V_OVERRIDE:-$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")}
 [ -n "$V" ] || { echo "FEHLER: Version nicht ermittelbar (Parameter angeben)"; exit 1; }
 
+if [ "$MODE" = check ]; then
+	# origin is the fork (rpx99). New xAI syncs land on upstream/main.
+	if ! git -C "$REPO" remote get-url upstream >/dev/null 2>&1; then
+		git -C "$REPO" remote add upstream "$UPSTREAM_URL"
+	fi
+	git -C "$REPO" fetch upstream main >/dev/null 2>&1 \
+		|| { echo "FEHLER: git fetch upstream fehlgeschlagen (Netz?)"; exit 1; }
+	CARGO=crates/codegen/xai-grok-pager-bin/Cargo.toml
+	LV=$(ver_of "$REPO/$CARGO")
+	RV=$(git -C "$REPO" show "upstream/main:$CARGO" \
+		| awk '/^version/ {gsub(/"/, "", $3); print $3; exit}')
+	HEAD_SHA=$(git -C "$REPO" rev-parse HEAD)
+	UP_SHA=$(git -C "$REPO" rev-parse upstream/main)
+	BASE_SHA=$(git -C "$REPO" merge-base HEAD upstream/main)
+	echo "lokal    : $LV ($(git -C "$REPO" rev-parse --short HEAD))"
+	echo "xAI/main : $RV ($(git -C "$REPO" rev-parse --short upstream/main))"
+	O=$(git -C "$REPO" rev-parse --short origin/main 2>/dev/null || true)
+	if [ -n "$O" ]; then
+		echo "Fork     : $O (origin, nicht die Sync-Quelle)"
+	fi
+	if [ "$UP_SHA" = "$BASE_SHA" ]; then
+		echo "==> kein neuer xAI-Sync: upstream/main steckt bereits in HEAD."
+	else
+		N=$(git -C "$REPO" rev-list --count "$BASE_SHA".."$UP_SHA")
+		echo "==> $N neuer xAI-Commit(s) auf upstream/main (nicht in HEAD):"
+		git -C "$REPO" --no-pager log --oneline -15 "$BASE_SHA".."$UP_SHA"
+		if [ "$N" -gt 15 ]; then
+			echo "    ... ($N insgesamt)"
+		fi
+		echo "Dann (nicht git pull — origin ist der Fork):"
+		echo "    git fetch upstream && git rebase upstream/main"
+		echo "    $0"
+	fi
+	exit 0
+fi
+
 for tool in git rustc protoc pkg-config make awk grep pax; do
 	command -v "$tool" >/dev/null || { echo "FEHLER: '$tool' fehlt"; exit 1; }
 done
 [ -d "$PORTSDIR" ] || { echo "FEHLER: $PORTSDIR existiert nicht (ports(7))"; exit 1; }
-
-if [ "$MODE" = check ]; then
-	git -C "$REPO" fetch origin main >/dev/null 2>&1 \
-		|| { echo "FEHLER: git fetch fehlgeschlagen (Netz?)"; exit 1; }
-	LV=$(ver_of "$REPO/crates/codegen/xai-grok-pager-bin/Cargo.toml")
-	RV=$(git -C "$REPO" show origin/main:crates/codegen/xai-grok-pager-bin/Cargo.toml \
-		| awk '/^version/ {gsub(/"/, "", $3); print $3; exit}')
-	echo "lokal : $LV ($(git -C "$REPO" rev-parse --short HEAD))"
-	echo "remote: $RV ($(git -C "$REPO" rev-parse --short origin/main))"
-	if [ "$(git -C "$REPO" rev-parse HEAD)" = "$(git -C "$REPO" rev-parse origin/main)" ]; then
-		echo "==> auf neuestem Sync-Stand, nichts zu tun."
-	else
-		echo "==> neuer xAI-Sync verfuegbar! Dann:"
-		echo "    git pull && $0 -i"
-	fi
-	exit 0
-fi
 
 echo "==> Version: $V"
 echo "==> Verzeichnisse: PORTTREE=$PORTTREE DISTDIR=$DISTDIR"

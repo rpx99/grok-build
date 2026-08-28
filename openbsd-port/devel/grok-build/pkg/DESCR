@@ -13,3 +13,5 @@ stable can lag the git tag). Use this port for upgrades, not
 caps open files at 1024; grok raises the process soft limit toward
 that (or 8192 if the login class allows). It does not edit
 login.conf. To go higher, add a login class with openfiles-cur/max=8192.
+xAI may ship a new monorepo dump under the same Cargo version; those
+rebuilds use REVISION (1.0.10p0) and grok --version shows SOURCE_REV.

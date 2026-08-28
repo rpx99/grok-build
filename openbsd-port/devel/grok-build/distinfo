@@ -966,7 +966,6 @@ SHA256 (cargo/tokio-macros-2.7.0.tar.gz) = OFpstxq5q3kMX+jWfxZF5sRQp84AajPeA9qpV
 SHA256 (cargo/tokio-retry-0.3.0.tar.gz) = f1frNuy+D8UQA2rf+Egk3Twku3geIb+me2nVVqqFIU8=
 SHA256 (cargo/tokio-rustls-0.26.4.tar.gz) = FymqlF8p2RulQSWMjfiQJ9V5LYWohB+2Xovw9O3k72E=
 SHA256 (cargo/tokio-stream-0.1.17.tar.gz) = 7KWNe7pKdXB4F6LEQXQlP5I2stX70FVgLp1cB8E5oEc=
-SHA256 (cargo/tokio-tungstenite-0.27.0.tar.gz) = SJpZtnMO2hsBcfz9qLEh9L7is1y6hkXKNcX3uj63NsE=
 SHA256 (cargo/tokio-tungstenite-0.28.0.tar.gz) = 0lpAbN3MQxp109mvxqfA90KNSJHdlz5NVMVrRhJ7+Fc=
 SHA256 (cargo/tokio-util-0.7.17.tar.gz) = LvoUn+dgc9bo/ZfvT07Ke2f1mWYBFVkUg1cuQG4WVZQ=
 SHA256 (cargo/toml-0.9.12+spec-1.1.0.tar.gz) = z5KEXnn8Li3val2CjwgB4poviswDe+zFqwhZXH1emGM=
@@ -1009,10 +1008,11 @@ SHA256 (cargo/ts-rs-12.0.1.tar.gz) = dWBQBmZZKR1HpVSp9VgSXbF0KLBzxf/OHa9dyw9yMdg
 SHA256 (cargo/ts-rs-macros-12.0.1.tar.gz) = ONkO6lG8eYjvnmdL+AqFumgEc55TXpyrSOS7NKi2Uqo=
 SHA256 (cargo/ttf-parser-0.25.1.tar.gz) = 0t+QaweFZ0j6P24K0MuqBHBS1KfdYJ4jHE9yzujDbzE=
 SHA256 (cargo/tui-scrollbar-0.2.2.tar.gz) = DkJnMRtceZmpluqUk5ttKxtEqeXMEedsu7bcykwoHfQ=
-SHA256 (cargo/tungstenite-0.27.0.tar.gz) = 6twp1mjJH8xWSUETLheyinzrLz6/C52uPgP9emdI6w0=
 SHA256 (cargo/tungstenite-0.28.0.tar.gz) = hijcyE5aCes9hCPWy2gpZd6pEzIE6Ps+/udMKgwllEI=
 SHA256 (cargo/two-face-0.4.5.tar.gz) = OeUbbmDlRc/a5aRjn/QjgY9SNyIRqNmj6JK0sHYfdrI=
 SHA256 (cargo/typenum-1.19.0.tar.gz) = Vi1IEGa94GWCdqNUZ8SvAL3G7nJjBWmKVbhuYdetgrs=
+SHA256 (cargo/typeshare-1.0.4.tar.gz) = Gb4PQREgCR524T5aAYbY4rzD5+JEr9twFSGX8ahIbOs=
+SHA256 (cargo/typeshare-annotation-1.0.4.tar.gz) = phXWwnZIUqLoik8W6c4epJu3drWHKVYwnhcNY6BCo08=
 SHA256 (cargo/typify-0.6.2.tar.gz) = vAuJ9HMJ/q6yPEUJwVyaBCNPfezO9vlsO/6VMZgZowQ=
 SHA256 (cargo/typify-impl-0.6.2.tar.gz) = +nsCb1QLFIuBBDxyCInbuUKwhlmqikP2JKxPBNv8GGE=
 SHA256 (cargo/typify-macro-0.6.2.tar.gz) = Oe2WxX8Grgg5QWuYaSGpjxiyINpju7JDqFcKAMhJIYM=
@@ -1222,7 +1222,7 @@ SHA256 (cargo/zune-jpeg-0.5.15.tar.gz) = J7ydW4FbwQPxQqoFT1YdkYfRkWkux8LR4rRzf42
 SHA256 (cargo/zvariant-5.10.0.tar.gz) = VwgpmyGQO740jpRynyLEnFXQRyCgBKo1Dx+cEi/SVAs=
 SHA256 (cargo/zvariant_derive-5.10.0.tar.gz) = W1mwEuvpxGZW+cwI2NqLTHJlEK7xJVnaPl8b9yeAdSw=
 SHA256 (cargo/zvariant_utils-3.3.0.tar.gz) = 91wjpk749A8TppiZkeZDVU2b7x1oKigRYM8MG8OJxek=
-SHA256 (grok-build-1.0.10.tar.gz) = ruxB83H4uOAaW1OkLRnUruE2lQGcvhAvojVojGxLxx0=
+SHA256 (grok-build-1.0.10.tar.gz) = ljnXxRFtTTmdiV4jYrU64remqSWWGXXLvAeMKNLMF5Q=
 SIZE (cargo/addr2line-0.25.1.tar.gz) = 43134
 SIZE (cargo/adler2-2.0.1.tar.gz) = 13366
 SIZE (cargo/aes-0.8.4.tar.gz) = 124812
@@ -2191,7 +2191,6 @@ SIZE (cargo/tokio-macros-2.7.0.tar.gz) = 15859
 SIZE (cargo/tokio-retry-0.3.0.tar.gz) = 6146
 SIZE (cargo/tokio-rustls-0.26.4.tar.gz) = 35430
 SIZE (cargo/tokio-stream-0.1.17.tar.gz) = 38477
-SIZE (cargo/tokio-tungstenite-0.27.0.tar.gz) = 29756
 SIZE (cargo/tokio-tungstenite-0.28.0.tar.gz) = 29876
 SIZE (cargo/tokio-util-0.7.17.tar.gz) = 133898
 SIZE (cargo/toml-0.9.12+spec-1.1.0.tar.gz) = 56485
@@ -2234,10 +2233,11 @@ SIZE (cargo/ts-rs-12.0.1.tar.gz) = 57231
 SIZE (cargo/ts-rs-macros-12.0.1.tar.gz) = 21085
 SIZE (cargo/ttf-parser-0.25.1.tar.gz) = 201121
 SIZE (cargo/tui-scrollbar-0.2.2.tar.gz) = 46883
-SIZE (cargo/tungstenite-0.27.0.tar.gz) = 67162
 SIZE (cargo/tungstenite-0.28.0.tar.gz) = 67629
 SIZE (cargo/two-face-0.4.5.tar.gz) = 3455324
 SIZE (cargo/typenum-1.19.0.tar.gz) = 76414
+SIZE (cargo/typeshare-1.0.4.tar.gz) = 3805
+SIZE (cargo/typeshare-annotation-1.0.4.tar.gz) = 1869
 SIZE (cargo/typify-0.6.2.tar.gz) = 55663
 SIZE (cargo/typify-impl-0.6.2.tar.gz) = 454932
 SIZE (cargo/typify-macro-0.6.2.tar.gz) = 11708
@@ -2447,4 +2447,4 @@ SIZE (cargo/zune-jpeg-0.5.15.tar.gz) = 88879
 SIZE (cargo/zvariant-5.10.0.tar.gz) = 93150
 SIZE (cargo/zvariant_derive-5.10.0.tar.gz) = 16592
 SIZE (cargo/zvariant_utils-3.3.0.tar.gz) = 15417
-SIZE (grok-build-1.0.10.tar.gz) = 28540347
+SIZE (grok-build-1.0.10.tar.gz) = 28742851

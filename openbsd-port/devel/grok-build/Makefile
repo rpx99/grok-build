@@ -1,5 +1,6 @@
 COMMENT =	SpaceXAI terminal AI coding agent (grok)
 V =		1.0.10
+REVISION =	0
 DISTNAME =	grok-build-${V}
 DISTFILES =	${DISTNAME}${EXTRACT_SUFX}
 PKGNAME =	grok-build-${V}
@@ -17,7 +18,7 @@ COMPILER =	base-clang
 BUILD_DEPENDS +=	textproc/ripgrep
 RUN_DEPENDS +=	x11/xclip
 LIB_DEPENDS +=	archivers/zstd 		databases/sqlite3 		devel/libgit2/libgit2 		devel/pcre2 		security/libssh2 		textproc/oniguruma 		www/llhttp
-MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		GROK_SHELL_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		LIBGIT2_NO_VENDOR=1
+MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		GROK_SHELL_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		GROK_VERSION=${V} 		LIBGIT2_NO_VENDOR=1
 
 MODULES =	devel/cargo
 CONFIGURE_STYLE =	cargo

@@ -87,6 +87,7 @@ SHA256 (cargo/backon-1.6.0.tar.gz) = z/sOkxh1tmb8T8sg/uUum70e+Db9np4E7CFVX5+F9+8
 SHA256 (cargo/backtrace-0.3.76.tar.gz) = u1MYU3kaIV18YqMNrw3eg184GrXeRYnP58ZJ0svpK9Y=
 SHA256 (cargo/base16ct-0.2.0.tar.gz) = TH8C1Opl8sGFMIn/2NJ4e9vGPeLw0p3tvPjM36DM1M8=
 SHA256 (cargo/base64-0.22.1.tar.gz) = crMlTxYlGoOBqhLkDjxNLwGZ+MZQj77LnZH1deD7uMY=
+SHA256 (cargo/base64-0.23.1.tar.gz) = rAfN7PmQUdmlI4uA81rzLN66WzNuVdlXsxi1ATfhjaU=
 SHA256 (cargo/base64-simd-0.8.0.tar.gz) = M5q7545zF4di4jvqnf0I5pfrPzMBzUvpgcD3i6WFkZU=
 SHA256 (cargo/base64ct-1.8.0.tar.gz) = VSSLR7DK8FRveYiQZYh3mYHEO7G8nQxECHJ4+AzbRLo=
 SHA256 (cargo/bincode-1.3.3.tar.gz) = sfRelBfYcifHpW0i5HHGIGRiy6UUx1kMCa/0z20d3K0=
@@ -213,11 +214,11 @@ SHA256 (cargo/curve25519-dalek-4.1.3.tar.gz) = l/uLfEUD3n1q57QqtypaWYV7TJN+wno9R
 SHA256 (cargo/curve25519-dalek-derive-0.1.1.tar.gz) = 9GiC4XmZxsxZCvWSKQQyvjvOBCjLDV+LZxXk3Hs4PrM=
 SHA256 (cargo/dark-light-2.0.0.tar.gz) = GOGgnygOKaiwC8foHspayH3KBXVjnJQipfoloHu4hLg=
 SHA256 (cargo/darling-0.20.11.tar.gz) = /H9GEWxG/5qz6xWXpFaItnFcbmKLXBM+KI5wmim8tO4=
-SHA256 (cargo/darling-0.23.0.tar.gz) = Ja4T2i8gLVa9f5HCX7oAnncXoeShzJinbYRLZa6RLp0=
+SHA256 (cargo/darling-0.24.1.tar.gz) = 7Rf1kBtmMLmTygA970Py+O9AFPwTsEe1eq1hf/Mrwuw=
 SHA256 (cargo/darling_core-0.20.11.tar.gz) = DQC5WW0YXlZcIgegsB+L0aE1SD0C2bewpUsR2o1TQS4=
-SHA256 (cargo/darling_core-0.23.0.tar.gz) = mGWlD3wzX1NWS7aU72YIJeuGEOClPT4RvxsNPfMeA7A=
+SHA256 (cargo/darling_core-0.24.1.tar.gz) = aDfiz3SFqq4Y+GGB0vDpp+0pegJeIgrqv2P969Oi3f8=
 SHA256 (cargo/darling_macro-0.20.11.tar.gz) = /DS5PMs4W0Dcccb86sSyrSNmLH7rJIzxDVKbfgVbbq0=
-SHA256 (cargo/darling_macro-0.23.0.tar.gz) = rDmE7HvWz6eY5itKZCQmpb4OaPlAHPwqAeP6nqL8240=
+SHA256 (cargo/darling_macro-0.24.1.tar.gz) = KscTXD7wKy94M7vrG+W6f5ZtzeiofGuH9lp3jXGgJ4U=
 SHA256 (cargo/dashmap-6.1.0.tar.gz) = UEHMSZFEiR83kClyEvMqdPuTjlE2oUlD8zjvngrids8=
 SHA256 (cargo/dasp_sample-0.11.0.tar.gz) = DIfhgt4Ih/1TYZicZ3xOj1AAzZSR1tVjFhqPOlUZ/H8=
 SHA256 (cargo/data-encoding-2.9.0.tar.gz) = KiMw2l3iLoo8tjJSziq7MBFr9SZeicDgG8FwFc4wpHY=
@@ -779,8 +780,8 @@ SHA256 (cargo/rgb-0.8.52.tar.gz) = DGqITSmYNSu02vAYNYmuyIPxam2h9N3oTY4umlQJoc4=
 SHA256 (cargo/rhai-1.25.1.tar.gz) = 3U3Q+MNmJSAqS6VTxBbBm3GZR80qMdG9oGEm5KVyfa8=
 SHA256 (cargo/rhai_codegen-3.2.0.tar.gz) = PNOnU15QvzaFfnvnvsJ20zTowt+kacIgEib9AWOOpco=
 SHA256 (cargo/ring-0.17.14.tar.gz) = pGiebCKU2B6I3GJhx2i2O8T824Ur5tE1JJixFPYTg7c=
-SHA256 (cargo/rmcp-2.1.0.tar.gz) = 8Aoyw7gbeyVAdqZavVqyVRIJFGcTujj3OBhlfoZelDM=
-SHA256 (cargo/rmcp-macros-2.1.0.tar.gz) = LucK+3lW2p8w1TSKJTm165DZA4+DRGNlercXB2rDsa0=
+SHA256 (cargo/rmcp-3.2.0.tar.gz) = QraRT6wL6Vb+cEo4I5w/RKn4QdGwalcT0vY4BlWT9bU=
+SHA256 (cargo/rmcp-macros-3.2.0.tar.gz) = zfHEm9TVIBS5TbCHdBDbJzwgCPAWKLAlKi6UYK2bf9o=
 SHA256 (cargo/roxmltree-0.20.0.tar.gz) = bCC2eTtcL6ZVOyUBVLeNbQ2zfnJwCuNfrZOHpG9IfJc=
 SHA256 (cargo/roxmltree-0.21.1.tar.gz) = 8ZZLEMdhJcNviv4ZAGWkv5qHvzJIQsBXATMLup8crLs=
 SHA256 (cargo/rsa-0.9.10.tar.gz) = uFc/A/WIPcrr389HJcqh7LnBWy71DEOge4FuBnmbsS0=
@@ -890,7 +891,7 @@ SHA256 (cargo/spin-0.10.0.tar.gz) = 1f5My5jZwpLVb+yJpeB9p/xM8NwR4Va0F5MTJ3XT5ZE=
 SHA256 (cargo/spin-0.9.8.tar.gz) = aYDo11ESQfis9K6927H/k4317r6YaRQYxEaNC3Kpamc=
 SHA256 (cargo/spki-0.7.3.tar.gz) = 2R7WyFiwH5Qs1Ws3qUs+CheYKQMn0SNuTZz06spE0p0=
 SHA256 (cargo/sqlite-vec-0.1.7-alpha.2.tar.gz) = I4jZuXsyuqSKBZ3y8VqbtJIX+h+fsHbpjIno/ALI8sQ=
-SHA256 (cargo/sse-stream-0.2.1.tar.gz) = 603E0zxo7B8n04a1YQo1GSJlbh/fXAW7qtkwzRUZR5o=
+SHA256 (cargo/sse-stream-0.2.5.tar.gz) = wSPylq3k7EuLD2FiEW5mKfUUaSLKWrQMqdPC5zq0dh4=
 SHA256 (cargo/stable_deref_trait-1.2.1.tar.gz) = bOK+jcJUVeH5Hfcb+hKtN9evEJKuc286bNDje8eBBZY=
 SHA256 (cargo/static_assertions-1.1.0.tar.gz) = ouuTSbZESzJocuFA6xz158UiFU1p56D/sPuBwGs3VD8=
 SHA256 (cargo/stop-words-0.9.0.tar.gz) = ZFo9RBzPS/R/Lkt2gUYZhmgabu6pk31MO8n+vWHRfHE=
@@ -917,6 +918,7 @@ SHA256 (cargo/symbolic-common-12.16.3.tar.gz) = 0D9DPJvv7qRgoB11DmmKqGyvhtz7131V
 SHA256 (cargo/symbolic-demangle-12.16.3.tar.gz) = E9NZ72GS2xdgo0Mh7E8IkkXt5DQsJ+Wb6ZZC8SqFneg=
 SHA256 (cargo/syn-1.0.109.tar.gz) = crZBkbJ1tm/+JGnorywc/juvpntSnq15Km0BYIiLQjc=
 SHA256 (cargo/syn-2.0.117.tar.gz) = 5mW4gD57HSpyf0AjRWu7vnTaZwmcWFJYrwrZxQE7m5k=
+SHA256 (cargo/syn-3.0.4.tar.gz) = 5idc3fRhDRd15tH+lGmy530POf2Y+3RQkBuCHgxTZJ8=
 SHA256 (cargo/sync_wrapper-1.0.2.tar.gz) = C/JWzl79+jcCE8HaurWTWhLknyxY0V6erChw07TycmM=
 SHA256 (cargo/synstructure-0.13.2.tar.gz) = copw89uvW6t/DEsayNeuXqYKS1VJyKWRQ2HJkUenCdI=
 SHA256 (cargo/syntect-5.3.0.tar.gz) = ZWtFwF2VpXBDma7va9Dd7HsrNTG3yekAq798TSGQySU=
@@ -1218,7 +1220,7 @@ SHA256 (cargo/zune-jpeg-0.5.15.tar.gz) = J7ydW4FbwQPxQqoFT1YdkYfRkWkux8LR4rRzf42
 SHA256 (cargo/zvariant-5.10.0.tar.gz) = VwgpmyGQO740jpRynyLEnFXQRyCgBKo1Dx+cEi/SVAs=
 SHA256 (cargo/zvariant_derive-5.10.0.tar.gz) = W1mwEuvpxGZW+cwI2NqLTHJlEK7xJVnaPl8b9yeAdSw=
 SHA256 (cargo/zvariant_utils-3.3.0.tar.gz) = 91wjpk749A8TppiZkeZDVU2b7x1oKigRYM8MG8OJxek=
-SHA256 (grok-build-1.0.13.tar.gz) = yMizVdBPeVq+QW+SZ4tmJsyHY76q2th1g5TRFdypFsw=
+SHA256 (grok-build-1.0.16.tar.gz) = XF8nnoLhtGynw4ma7LKHenEzUIygqsv83xM6iTckEEk=
 SIZE (cargo/addr2line-0.25.1.tar.gz) = 43134
 SIZE (cargo/adler2-2.0.1.tar.gz) = 13366
 SIZE (cargo/aes-0.8.4.tar.gz) = 124812
@@ -1308,6 +1310,7 @@ SIZE (cargo/backon-1.6.0.tar.gz) = 42012
 SIZE (cargo/backtrace-0.3.76.tar.gz) = 89458
 SIZE (cargo/base16ct-0.2.0.tar.gz) = 10240
 SIZE (cargo/base64-0.22.1.tar.gz) = 81597
+SIZE (cargo/base64-0.23.1.tar.gz) = 93605
 SIZE (cargo/base64-simd-0.8.0.tar.gz) = 12531
 SIZE (cargo/base64ct-1.8.0.tar.gz) = 31211
 SIZE (cargo/bincode-1.3.3.tar.gz) = 28958
@@ -1434,11 +1437,11 @@ SIZE (cargo/curve25519-dalek-4.1.3.tar.gz) = 306017
 SIZE (cargo/curve25519-dalek-derive-0.1.1.tar.gz) = 11723
 SIZE (cargo/dark-light-2.0.0.tar.gz) = 15944
 SIZE (cargo/darling-0.20.11.tar.gz) = 37614
-SIZE (cargo/darling-0.23.0.tar.gz) = 43298
+SIZE (cargo/darling-0.24.1.tar.gz) = 51607
 SIZE (cargo/darling_core-0.20.11.tar.gz) = 68006
-SIZE (cargo/darling_core-0.23.0.tar.gz) = 74564
+SIZE (cargo/darling_core-0.24.1.tar.gz) = 83947
 SIZE (cargo/darling_macro-0.20.11.tar.gz) = 2532
-SIZE (cargo/darling_macro-0.23.0.tar.gz) = 2480
+SIZE (cargo/darling_macro-0.24.1.tar.gz) = 2481
 SIZE (cargo/dashmap-6.1.0.tar.gz) = 24828
 SIZE (cargo/dasp_sample-0.11.0.tar.gz) = 11617
 SIZE (cargo/data-encoding-2.9.0.tar.gz) = 21564
@@ -2000,8 +2003,8 @@ SIZE (cargo/rgb-0.8.52.tar.gz) = 22449
 SIZE (cargo/rhai-1.25.1.tar.gz) = 340087
 SIZE (cargo/rhai_codegen-3.2.0.tar.gz) = 41077
 SIZE (cargo/ring-0.17.14.tar.gz) = 1502610
-SIZE (cargo/rmcp-2.1.0.tar.gz) = 359849
-SIZE (cargo/rmcp-macros-2.1.0.tar.gz) = 21681
+SIZE (cargo/rmcp-3.2.0.tar.gz) = 541362
+SIZE (cargo/rmcp-macros-3.2.0.tar.gz) = 18855
 SIZE (cargo/roxmltree-0.20.0.tar.gz) = 54594
 SIZE (cargo/roxmltree-0.21.1.tar.gz) = 56837
 SIZE (cargo/rsa-0.9.10.tar.gz) = 86417
@@ -2111,7 +2114,7 @@ SIZE (cargo/spin-0.10.0.tar.gz) = 39654
 SIZE (cargo/spin-0.9.8.tar.gz) = 38958
 SIZE (cargo/spki-0.7.3.tar.gz) = 16409
 SIZE (cargo/sqlite-vec-0.1.7-alpha.2.tar.gz) = 225320
-SIZE (cargo/sse-stream-0.2.1.tar.gz) = 20239
+SIZE (cargo/sse-stream-0.2.5.tar.gz) = 26787
 SIZE (cargo/stable_deref_trait-1.2.1.tar.gz) = 8186
 SIZE (cargo/static_assertions-1.1.0.tar.gz) = 18480
 SIZE (cargo/stop-words-0.9.0.tar.gz) = 111799
@@ -2138,6 +2141,7 @@ SIZE (cargo/symbolic-common-12.16.3.tar.gz) = 27976
 SIZE (cargo/symbolic-demangle-12.16.3.tar.gz) = 192828
 SIZE (cargo/syn-1.0.109.tar.gz) = 237611
 SIZE (cargo/syn-2.0.117.tar.gz) = 306011
+SIZE (cargo/syn-3.0.4.tar.gz) = 313047
 SIZE (cargo/sync_wrapper-1.0.2.tar.gz) = 6958
 SIZE (cargo/synstructure-0.13.2.tar.gz) = 18950
 SIZE (cargo/syntect-5.3.0.tar.gz) = 833348
@@ -2439,4 +2443,4 @@ SIZE (cargo/zune-jpeg-0.5.15.tar.gz) = 88879
 SIZE (cargo/zvariant-5.10.0.tar.gz) = 93150
 SIZE (cargo/zvariant_derive-5.10.0.tar.gz) = 16592
 SIZE (cargo/zvariant_utils-3.3.0.tar.gz) = 15417
-SIZE (grok-build-1.0.13.tar.gz) = 28516294
+SIZE (grok-build-1.0.16.tar.gz) = 28713373

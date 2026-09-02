@@ -1,5 +1,5 @@
 COMMENT =	SpaceXAI terminal AI coding agent (grok)
-V =		1.0.13
+V =		1.0.16
 
 DISTNAME =	grok-build-${V}
 DISTFILES =	${DISTNAME}${EXTRACT_SUFX}
@@ -18,12 +18,7 @@ COMPILER =	base-clang
 BUILD_DEPENDS +=	textproc/ripgrep
 RUN_DEPENDS +=	x11/xclip
 LIB_DEPENDS +=	archivers/zstd 		databases/sqlite3 		devel/libgit2/libgit2 		devel/pcre2 		security/libssh2 		textproc/oniguruma 		www/llhttp
-MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg \
-		GROK_SHELL_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg \
-		GROK_VERSION=${V} \
-		LIBGIT2_NO_VENDOR=1 \
-		LIBRARY_PATH=${LOCALBASE}/lib \
-		PKG_CONFIG_PATH=${LOCALBASE}/lib/pkgconfig
+MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		GROK_SHELL_BUNDLE_RG_PATH=${LOCALBASE}/bin/rg 		GROK_VERSION=${V} 		LIBGIT2_NO_VENDOR=1 		LIBRARY_PATH=${LOCALBASE}/lib 		PKG_CONFIG_PATH=${LOCALBASE}/lib/pkgconfig
 
 MODULES =	devel/cargo
 CONFIGURE_STYLE =	cargo
@@ -43,7 +38,7 @@ do-install:
 USE_NOEXECONLY =	Yes
 .endif
 MODCARGO_RUSTFLAGS +=	-Clink-arg=-Wl,--no-execute-only
-# zstd-sys emits -lzstd without -L; rustc cannot find /usr/local/lib/libzstd
-# when linking crate build scripts (xai-grok-tools).
+# zstd-sys emits -lzstd without -L (pkg-config search path dropped). rustc
+# then fails linking xai-grok-tools' build.rs: "unable to find library -lzstd".
 MODCARGO_RUSTFLAGS +=	-Lnative=${LOCALBASE}/lib
 .include <bsd.port.mk>

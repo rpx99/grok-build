@@ -278,7 +278,9 @@ LIB_DEPENDS +=	archivers/zstd \
 MAKE_ENV +=	GROK_TOOLS_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
 		GROK_SHELL_BUNDLE_RG_PATH=\${LOCALBASE}/bin/rg \
 		GROK_VERSION=\${V} \
-		LIBGIT2_NO_VENDOR=1
+		LIBGIT2_NO_VENDOR=1 \
+		LIBRARY_PATH=\${LOCALBASE}/lib \
+		PKG_CONFIG_PATH=\${LOCALBASE}/lib/pkgconfig
 
 MODULES =	devel/cargo
 CONFIGURE_STYLE =	cargo
@@ -298,6 +300,9 @@ do-install:
 USE_NOEXECONLY =	Yes
 .endif
 MODCARGO_RUSTFLAGS +=	-Clink-arg=-Wl,--no-execute-only
+# zstd-sys emits -lzstd without -L (pkg-config search path dropped). rustc
+# then fails linking xai-grok-tools' build.rs: "unable to find library -lzstd".
+MODCARGO_RUSTFLAGS +=	-Lnative=\${LOCALBASE}/lib
 .include <bsd.port.mk>
 EOF
 

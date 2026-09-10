@@ -1,0 +1,17 @@
+Grok Build is SpaceXAI's terminal-based AI coding agent: a fullscreen TUI
+that understands a codebase, edits files, runs shell commands, searches
+the web and manages long-running tasks - interactively, headlessly or
+embedded in editors via ACP.
+
+Native OpenBSD source build of github.com/xai-org/grok-build.
+Authenticate with "grok login" or set XAI_API_KEY. State lives under
+~/.grok/.
+
+This package is not managed by the xAI CDN auto-updater (official
+stable can lag the git tag). Use this port for upgrades, not
+`grok update`. Copy uses xclip(1) (RUN_DEPENDS). Default login.conf
+caps open files at 1024; grok raises the process soft limit toward
+that (or 8192 if the login class allows). It does not edit
+login.conf. To go higher, add a login class with openfiles-cur/max=8192.
+xAI may ship a new monorepo dump under the same Cargo version; those
+rebuilds use REVISION (1.0.10p0) and grok --version shows SOURCE_REV.

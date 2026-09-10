@@ -24,11 +24,11 @@ pub(crate) fn sample_rss_bytes() -> u64 {
             let mut usage: libc::rusage = std::mem::zeroed();
             if libc::getrusage(libc::RUSAGE_SELF, &mut usage) == 0 {
                 let rss = (usage.ru_maxrss).max(0) as u64;
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))]
                 {
-                    rss * 1024 // Linux reports in kB
+                    rss * 1024 // Linux and BSDs report in kB
                 }
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd")))]
                 {
                     // macOS (our only non-Linux Unix target) reports bytes
                     // Other BSDs report kB like Linux; revisit the unit if we ever port

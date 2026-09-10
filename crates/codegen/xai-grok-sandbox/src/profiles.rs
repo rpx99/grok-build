@@ -2,21 +2,21 @@
 //! `off`. Custom profiles via `~/.grok/sandbox.toml` or `.grok/sandbox.toml`.
 //! A custom profile's `deny` list is kernel-enforced (read and write/rename) on both platforms.
 
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use nono::{AccessMode, CapabilitySet};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::allow_path::normalize_allow_path;
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use crate::deny::{
     apply_deny_globs_to_capability_set, apply_deny_paths_to_capability_set,
     apply_write_deny_paths_to_capability_set, effective_deny_paths, partition_deny_entries,
 };
 use crate::hook_write_deny::profile_hook_write_deny;
 use crate::paths::grok_home;
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use crate::paths::{DEVICE_DIRS, DEVICE_FILES};
 use crate::paths::{
     essential_writable_paths, essential_writable_paths_minimal, essential_writable_paths_strict,
@@ -177,10 +177,15 @@ fn load_config_file(path: &Path) -> Option<SandboxConfig> {
     }
 }
 
-/// `/dev/tty` always exists, but without a controlling terminal `open()` returns ENXIO and nono's apply aborts the entire
-/// ruleset. Other open errors (notably EISDIR on directory nodes) must not drop the path: directories are granted via
-/// [`DEVICE_DIRS`] / `allow_path`. A plain `File::open` EISDIR does not mean Landlock would reject the grant.
-#[cfg(all(feature = "enforce", unix))]
+/// Whether a device **file** entry is safe to pass to `allow_file` / Landlock PathFd materialization.
+///
+/// `/dev/tty` always exists, but without a controlling terminal `open()` returns ENXIO and nono's apply aborts the **entire** ruleset.
+/// Built-in profiles fail open, which was a silent sandbox bypass under `setsid`/CI/headless launches.
+///
+/// Only that class of failure (and missing nodes) is filtered here.
+/// Other open errors (notably **EISDIR** on directory nodes) must not drop the path: directories are granted via [`DEVICE_DIRS`] / `allow_path`.
+/// A plain `File::open` EISDIR does not mean Landlock would reject the grant.
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 fn device_file_openable(path: &Path) -> bool {
     match std::fs::File::open(path) {
         Ok(_) => true,
@@ -195,7 +200,7 @@ fn device_file_openable(path: &Path) -> bool {
 
 impl ProfileName {
     /// Convert this profile into a nono `CapabilitySet` for the given workspace.
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn to_capability_set(&self, workspace: &Path) -> anyhow::Result<CapabilitySet> {
         let config = load_sandbox_config(workspace);
         self.to_capability_set_with_config(workspace, &config)
@@ -204,7 +209,7 @@ impl ProfileName {
     /// Convert using an already-loaded config (avoids re-reading disk).
     ///
     /// A custom profile's own `deny` list is kernel-enforced (read and write/rename) on top of the base profile.
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn to_capability_set_with_config(
         &self,
         workspace: &Path,
@@ -218,7 +223,7 @@ impl ProfileName {
         Self::capability_set_from_profile(workspace, &profile)
     }
 
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn read_write_grant_path(path: &Path, home: &Path) -> Option<PathBuf> {
         match std::fs::symlink_metadata(path) {
             Ok(meta) if meta.file_type().is_symlink() => {
@@ -252,7 +257,7 @@ impl ProfileName {
         }
     }
 
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub(crate) fn capability_set_from_profile(
         workspace: &Path,
         profile: &SandboxProfile,
@@ -661,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn strict_allowlist_includes_run_and_var_when_present() {
         if skip_if_host_hook_write_deny_unresolvable() {
             return;
@@ -771,7 +776,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn base_profile_capability_set_builds() {
         if skip_if_host_hook_write_deny_unresolvable() {
             return;
@@ -783,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn custom_profile_from_config() {
         if skip_if_host_hook_write_deny_unresolvable() {
             return;
@@ -808,7 +813,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn custom_extends_devbox_has_no_data_in_deny() {
         // Regression: devbox excludes /data via a local list, not profile.deny
         // Inheriting it into the kernel deny set would wrongly read-deny /data and force fail-closed
@@ -835,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn custom_profile_not_found() {
         let workspace = std::env::current_dir().unwrap();
         let config = SandboxConfig::default();
@@ -963,7 +968,7 @@ read_write = ["/tmp/ci-artifacts"]
     /// Building the capability set pre-creates missing `read_write` dirs.
     /// A trailing-`/**` entry must create/grant the parent, never a literal `**` dir.
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn capability_set_trailing_glob_does_not_create_starstar_dir() {
         if skip_if_host_hook_write_deny_unresolvable() {
             return;
@@ -1072,7 +1077,7 @@ read_write = ["/tmp/ci-artifacts"]
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn extends_off_returns_err_not_panic() {
         let workspace = std::env::current_dir().unwrap();
         let config = SandboxConfig {
@@ -1098,7 +1103,7 @@ read_write = ["/tmp/ci-artifacts"]
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn resolve_off_returns_err_not_panic() {
         let workspace = std::env::current_dir().unwrap();
         let err = ProfileName::Off
@@ -1108,7 +1113,7 @@ read_write = ["/tmp/ci-artifacts"]
     }
 
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn enxio_device_file_is_skipped_but_directory_is_not() {
         assert!(
             device_file_openable(Path::new("/dev/null")),
@@ -1157,7 +1162,7 @@ read_write = ["/tmp/ci-artifacts"]
     /// Building the strict CapabilitySet must succeed even when /dev/tty cannot be opened (no controlling terminal).
     /// Regression for the silent Landlock apply-abort under setsid/CI/headless.
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn strict_capability_set_builds_without_openable_dev_tty() {
         if skip_if_host_hook_write_deny_unresolvable() {
             return;
@@ -1174,7 +1179,7 @@ read_write = ["/tmp/ci-artifacts"]
     /// `/dev/fd` is a directory (a symlink to `/proc/self/fd` on Linux).
     /// It must be granted via DEVICE_DIRS/`allow_path`, not dropped by a file-open EISDIR probe.
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn dev_fd_is_granted_as_device_dir_not_skipped_as_file() {
         assert!(
             !DEVICE_FILES.contains(&"/dev/fd"),

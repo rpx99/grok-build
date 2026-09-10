@@ -1,6 +1,6 @@
 use std::fs;
 // OpenOptions is only used by the Unix-only profiler implementation.
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 
@@ -549,7 +549,7 @@ impl CpuProfileManager {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod platform {
     use std::fmt::Write as _;
     use std::io::Write as _;
@@ -674,7 +674,7 @@ mod platform {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 mod platform {
     use super::*;
 
@@ -743,14 +743,14 @@ mod tests {
     #[test]
     fn reports_platform_capabilities() {
         let manager = CpuProfileManager::new();
-        #[cfg(unix)]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             assert!(manager.profiling_compiled_in());
             assert!(manager.runtime_cpu_profile());
             // Empty until the fleet can decode `Folded`; see `platform::profile_formats()` for the rollout plan
             assert_eq!(manager.profile_formats(), &[] as &[ProfileArtifactFormat]);
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             assert!(!manager.profiling_compiled_in());
             assert!(!manager.runtime_cpu_profile());
@@ -938,7 +938,7 @@ mod tests {
 
     #[test]
     fn manager_start_rejects_unsupported_build() {
-        #[cfg(not(unix))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             let mut manager = CpuProfileManager::new();
             let err = manager

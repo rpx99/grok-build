@@ -523,7 +523,6 @@ dependencies = [
 [[package]]
 name = "async-openai"
 version = "0.33.1"
-source = "git+https://github.com/our-forks/async-openai.git?rev=95b52ebdedf42143083cf3d6f0e0be7c84e9c808#95b52ebdedf42143083cf3d6f0e0be7c84e9c808"
 dependencies = [
  "async-openai-macros",
  "backoff",
@@ -551,7 +550,6 @@ dependencies = [
 [[package]]
 name = "async-openai-macros"
 version = "0.1.1"
-source = "git+https://github.com/our-forks/async-openai.git?rev=95b52ebdedf42143083cf3d6f0e0be7c84e9c808#95b52ebdedf42143083cf3d6f0e0be7c84e9c808"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5017,9 +5015,9 @@ dependencies = [
 
 [[package]]
 name = "hmac-sha256"
-version = "1.1.12"
+version = "1.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad6880c8d4a9ebf39c6e8b77007ce223f646a4d21ce29d99f70cb16420545425"
+checksum = "ec9d92d097f4749b64e8cc33d924d9f40a2d4eb91402b458014b781f5733d60f"
 
 [[package]]
 name = "home"
@@ -5873,9 +5871,9 @@ dependencies = [
 
 [[package]]
 name = "kqueue"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eac30106d7dce88daf4a3fcb4879ea939476d5074a9b7ddd0fb97fa4bed5596a"
+checksum = "273c0752728918e0ac4976f2b275b6fefb9ecd400585dec929419f3844cd87b5"
 dependencies = [
  "kqueue-sys",
  "libc",
@@ -5883,11 +5881,11 @@ dependencies = [
 
 [[package]]
 name = "kqueue-sys"
-version = "1.0.4"
+version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed9625ffda8729b85e45cf04090035ac368927b8cebc34898e7c120f52e4838b"
+checksum = "07293a4e297ac234359b510362495713f75ea345d5307140414f20c69ffeb087"
 dependencies = [
- "bitflags 1.3.2",
+ "bitflags 2.13.0",
  "libc",
 ]
 
@@ -6779,7 +6777,6 @@ dependencies = [
 [[package]]
 name = "nucleo"
 version = "0.5.0"
-source = "git+https://github.com/helix-editor/nucleo.git?rev=5b74652#5b74652e482f7c07d827f18c6d21e7540c242c69"
 dependencies = [
  "nucleo-matcher",
  "parking_lot",
@@ -6789,7 +6786,6 @@ dependencies = [
 [[package]]
 name = "nucleo-matcher"
 version = "0.3.1"
-source = "git+https://github.com/helix-editor/nucleo.git?rev=5b74652#5b74652e482f7c07d827f18c6d21e7540c242c69"
 dependencies = [
  "memchr",
  "unicode-segmentation",

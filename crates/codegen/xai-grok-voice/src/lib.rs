@@ -7,7 +7,7 @@
 
 #![deny(clippy::indexing_slicing)]
 
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub mod audio;
 pub mod auth;
 pub mod config;
@@ -27,16 +27,21 @@ pub use language::{
     language_for_api, stt_language_by_code,
 };
 pub use pipeline::{VoiceCommand, run_voice_pipeline};
-#[cfg(feature = "audio")]
+#[cfg(all(feature = "audio", any(target_os = "linux", target_os = "macos", target_os = "windows", target_os = "openbsd")))]
 pub use probe::run_mic_only_probe;
 pub use probe::{
     InputDeviceInfo, VoiceProbeOptions, VoiceProbeReport, format_probe_report, input_device_info,
     run_streaming_probe,
 };
 
-/// Linux shells out to a system recorder (`pw-record`/`parec`/`arecord`) so the static-musl binary links no audio
-/// library. On Linux a `true` value means capture is *compiled in*; whether a recorder is actually installed is reported
-/// when a session starts. Consumers gate voice on this so a no-audio build never advertises a mic it can't open.
+/// Whether this build can capture microphone audio (the `audio` feature).
+/// Production CLI builds enable it on every OS: macOS and Windows link `cpal` (coreaudio/wasapi).
+/// Linux shells out to a system recorder (`pw-record`/`parec`/`arecord`) so the static-musl binary links no audio library.
+/// OpenBSD uses the same subprocess path with `aucat` (sndio).
+/// Bazel builds drop `audio` (no capture in the test sandbox).
+///
+/// On Linux a `true` value means capture is *compiled in*; whether a recorder is actually installed is reported when a session starts.
+/// Consumers gate voice on this so a no-audio build never advertises a mic it can't open.
 pub const AUDIO_SUPPORTED: bool = cfg!(feature = "audio");
 
 /// Hidden subcommand consumers re-exec themselves with to capture microphone audio in a short-lived helper process on macOS.
@@ -52,7 +57,7 @@ pub fn maybe_run_capture_subprocess() -> Option<i32> {
     if !is_capture_subcommand(&argv) {
         return None;
     }
-    #[cfg(all(feature = "audio", not(target_os = "linux")))]
+    #[cfg(all(feature = "audio", any(target_os = "macos", target_os = "windows")))]
     {
         // Skip argv[0] (binary) and argv[1] (subcommand); the rest are flags.
         let args: Vec<String> = argv
@@ -62,7 +67,7 @@ pub fn maybe_run_capture_subprocess() -> Option<i32> {
             .collect();
         Some(audio::run_capture_child_cli(args))
     }
-    #[cfg(not(all(feature = "audio", not(target_os = "linux"))))]
+    #[cfg(any(not(feature = "audio"), not(any(target_os = "macos", target_os = "windows"))))]
     {
         // This build's own parent backend never spawns the helper (Linux uses system recorders; no-audio builds have no capture)
         // Only a hand-typed invocation reaches here

@@ -61,7 +61,6 @@ xai-grok-version = { workspace = true }
 whoami = { workspace = true }
 uuid = { workspace = true, features = ["v5", "v7"] }
 obfstr = { workspace = true, optional = true }
-mid = "4.0.0"
 tokio = { workspace = true, features = ["macros", "sync", "rt", "time"] }
 parking_lot = { workspace = true }
 xai-grok-auth = { workspace = true }
@@ -88,6 +87,11 @@ webpki-roots = { workspace = true }
 base64 = { workspace = true }
 http = { workspace = true }
 tokio-stream = { workspace = true }
+
+# `mid` only supports Linux, macOS, and Windows. On other Unix (OpenBSD etc.)
+# the id.rs fallback uses a random UUIDv4 instead.
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+mid = "4.0.0"
 
 [dev-dependencies]
 # `#[async_trait]` on the in-process OTLP collector test fixture.

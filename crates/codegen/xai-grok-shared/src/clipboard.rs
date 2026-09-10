@@ -45,17 +45,36 @@ pub fn get_text() -> anyhow::Result<Option<String>> {
     platform::get_text()
 }
 
-/// Read UTF-8 text from the X11 PRIMARY selection. Requires a non-empty `DISPLAY`. Pure X11 may fall back to arboard;
-/// XWayland requires xclip or xsel so arboard cannot return Wayland PRIMARY by mistake.
-#[cfg(target_os = "linux")]
+/// Read UTF-8 text from the X11 PRIMARY selection.
+///
+/// Requires a non-empty `DISPLAY`.
+/// Pure X11 may fall back to arboard; XWayland requires xclip or xsel so arboard cannot return Wayland PRIMARY by mistake.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 pub fn get_primary_text() -> anyhow::Result<Option<String>> {
     platform::get_primary_text()
 }
 
-/// Whether this Linux process has a non-empty `DISPLAY` environment value.
-#[cfg(target_os = "linux")]
+/// Whether this process has a non-empty `DISPLAY` environment value.
+#[cfg(any(
+    target_os = "linux",
+    target_os = "openbsd",
+    target_os = "freebsd",
+    target_os = "netbsd"
+))]
 pub fn x11_display_env_present() -> bool {
-    platform::x11_display_env_present()
+    #[cfg(target_os = "linux")]
+    {
+        platform::x11_display_env_present()
+    }
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    {
+        std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty())
+    }
 }
 
 /// Read an image from the system clipboard. Returns `Ok(None)` when the clipboard does not contain an image. The returned
@@ -246,7 +265,17 @@ pub fn native_tool_name() -> &'static str {
     {
         platform::linux_tool_spec().map_or("arboard", |spec| spec.name)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    {
+        platform::bsd_x11_tool_name().unwrap_or("arboard")
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    )))]
     {
         "arboard"
     }
@@ -1315,6 +1344,120 @@ mod platform {
         false
     }
 
+    /// X11 clipboard CLI on BSD (the Linux `xclip`/`xsel` path is
+    /// `cfg(target_os = "linux")` and would never run here).
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bsd_display_set() -> bool {
+        std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty())
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bin_on_path(name: &str) -> bool {
+        std::env::var_os("PATH")
+            .map(|p| std::env::split_paths(&p).any(|dir| dir.join(name).is_file()))
+            .unwrap_or(false)
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    pub(super) fn bsd_x11_tool_name() -> Option<&'static str> {
+        static NAME: std::sync::OnceLock<Option<&'static str>> = std::sync::OnceLock::new();
+        *NAME.get_or_init(|| {
+            if !bsd_display_set() {
+                return None;
+            }
+            if bin_on_path("xclip") {
+                Some("xclip")
+            } else if bin_on_path("xsel") {
+                Some("xsel")
+            } else {
+                None
+            }
+        })
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bsd_x11_argv(write: bool, primary: bool) -> Option<(&'static str, &'static [&'static str])> {
+        match (bsd_x11_tool_name()?, write, primary) {
+            ("xclip", true, false) => Some(("xclip", &["-in", "-selection", "clipboard"][..])),
+            ("xclip", false, false) => Some(("xclip", &["-o", "-selection", "clipboard"][..])),
+            ("xclip", true, true) => Some(("xclip", &["-in", "-selection", "primary"][..])),
+            ("xclip", false, true) => Some(("xclip", &["-o", "-selection", "primary"][..])),
+            ("xsel", true, false) => Some(("xsel", &["--clipboard", "--input"][..])),
+            ("xsel", false, false) => Some(("xsel", &["--clipboard", "--output"][..])),
+            ("xsel", true, true) => Some(("xsel", &["--primary", "--input"][..])),
+            ("xsel", false, true) => Some(("xsel", &["--primary", "--output"][..])),
+            _ => None,
+        }
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bsd_x11_write_text(text: &[u8]) -> bool {
+        let Some((bin, args)) = bsd_x11_argv(true, false) else {
+            return false;
+        };
+        let Ok(stdin) = super::spool_for_stdin(text) else {
+            return false;
+        };
+        let mut cmd = Command::new(bin);
+        cmd.args(args)
+            .stdin(Stdio::from(stdin))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        xai_tty_utils::detach_std_command(&mut cmd);
+        #[allow(clippy::disallowed_methods)]
+        let Ok(mut child) = cmd.spawn() else {
+            return false;
+        };
+        super::wait_with_deadline(&mut child, std::time::Duration::from_secs(2))
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bsd_x11_read_text() -> anyhow::Result<Option<String>> {
+        let Some((bin, args)) = bsd_x11_argv(false, false) else {
+            return Ok(None);
+        };
+        let mut cmd = Command::new(bin);
+        cmd.args(args).stdin(Stdio::null()).stderr(Stdio::null());
+        xai_tty_utils::detach_std_command(&mut cmd);
+        #[allow(clippy::disallowed_methods)]
+        let output = cmd.output()?;
+        if !output.status.success() {
+            anyhow::bail!("{bin} exited with status {}", output.status);
+        }
+        if output.stdout.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
+        }
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    fn bsd_x11_read_primary() -> anyhow::Result<Option<String>> {
+        let Some((bin, args)) = bsd_x11_argv(false, true) else {
+            return Ok(None);
+        };
+        let mut cmd = Command::new(bin);
+        cmd.args(args).stdin(Stdio::null()).stderr(Stdio::null());
+        xai_tty_utils::detach_std_command(&mut cmd);
+        #[allow(clippy::disallowed_methods)]
+        let output = cmd.output()?;
+        if !output.status.success() {
+            anyhow::bail!("{bin} exited with status {}", output.status);
+        }
+        if output.stdout.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(String::from_utf8_lossy(&output.stdout).into_owned()))
+        }
+    }
+
+    #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+    pub fn get_primary_text() -> anyhow::Result<Option<String>> {
+        bsd_x11_read_primary()
+    }
+
     #[cfg(target_os = "linux")]
     pub(super) fn probe_wayland_data_control() -> super::WaylandDataControlProbe {
         if data_control_kill_switch_set() || !env_present("WAYLAND_DISPLAY") {
@@ -1729,6 +1872,10 @@ mod platform {
             // Wayland-only: arboard's empty answer is not authoritative, fall through to wl-paste (see `wayland_tool_selected`)
             #[cfg(target_os = "linux")]
             Ok(None) if wayland_tool_selected(linux_tool_spec()) => {}
+            // BSD: arboard often reports empty while xclip still has CLIPBOARD.
+            #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+            Ok(None) => {}
+            #[cfg(not(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd")))]
             Ok(None) => return Ok(None),
             Err(e) => {
                 tracing::debug!("arboard get_text failed: {e}");
@@ -1744,6 +1891,17 @@ mod platform {
             } else {
                 Some(String::from_utf8_lossy(&bytes).into_owned())
             });
+        }
+        #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+        match bsd_x11_read_text() {
+            Ok(Some(text)) => return Ok(Some(text)),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::debug!("BSD X11 clipboard read failed: {e}");
+                if arboard_error.is_none() {
+                    return Err(e);
+                }
+            }
         }
         if let Some(error) = arboard_error {
             return Err(error);
@@ -1817,6 +1975,15 @@ mod platform {
                     "CLI clipboard write failed ({spec_name}): {e}",
                     spec_name = spec.name
                 ),
+            }
+        }
+
+        #[cfg(any(target_os = "openbsd", target_os = "freebsd", target_os = "netbsd"))]
+        if let Some(name) = bsd_x11_tool_name() {
+            outcome.cli_tools_tried.push(name);
+            if bsd_x11_write_text(text.as_bytes()) {
+                outcome.cli_ok = true;
+                outcome.cli_ok_tools.push(name);
             }
         }
 

@@ -38,6 +38,8 @@ mod test_util;
 mod types;
 pub use hook_write_deny::{profile_enforces_hook_write_deny, verify_hook_write_deny_enforced};
 pub use logging::SandboxLogger;
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
+use nono::Sandbox;
 pub use network_policy::{
     ChildNetworkPolicy, NETWORK_POLICY_SNAPSHOT_VERSION, NetworkPolicySnapshot,
     NetworkPolicySnapshotError, WebsiteAction, WebsiteOrigin, WebsiteOriginError, WebsitePolicy,
@@ -62,7 +64,7 @@ pub fn requires_hook_write_deny(profile: &ProfileName, workspace: &Path) -> bool
         _ => true,
     }
 }
-#[cfg(all(feature = "enforce", unix))]
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 use nono::Sandbox;
 use std::path::Path;
 #[cfg(any(target_os = "linux", test))]
@@ -176,7 +178,7 @@ impl SandboxManager {
     }
     /// Apply the sandbox to the current process. **Irreversible.**
     /// Degrades gracefully if the platform doesn't support it.
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn apply(&mut self, workspace: &Path) -> anyhow::Result<()> {
         if self.profile == ProfileName::Off {
             tracing::info!("Sandbox disabled (profile: off)");
@@ -238,7 +240,7 @@ impl SandboxManager {
         }
     }
     /// Stub when `enforce` feature is disabled; sandbox is not applied.
-    #[cfg(not(all(feature = "enforce", unix)))]
+    #[cfg(not(all(feature = "enforce", any(target_os = "linux", target_os = "macos"))))]
     pub fn apply(&mut self, _workspace: &Path) -> anyhow::Result<()> {
         tracing::info!(
             profile = %self.profile,
@@ -258,7 +260,7 @@ impl SandboxManager {
             ),
         });
     }
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     pub fn support_info() -> nono::SupportInfo {
         Sandbox::support_info()
     }
@@ -434,10 +436,13 @@ fn is_devbox_based(profile: &ProfileName, config: &SandboxConfig) -> bool {
         _ => false,
     }
 }
-/// Whether kernel read-deny enforcement is required. This is the single source of truth, so callers (e.g. the shell's
-/// fail-closed startup path) cannot drift and silently fail open. Keying "requires" on that empty-on-error result would
-/// silently downgrade to fail-open (Linux) when resolution hiccups. This intrinsic check stays fail-closed.
-#[cfg(all(feature = "enforce", unix))]
+/// Whether kernel read-deny enforcement is required.
+/// This is the single source of truth, so callers (e.g. the shell's fail-closed startup path) cannot drift and silently fail open.
+///
+/// Decided directly from the profile config, NOT from the resolved/expanded deny set, which returns empty on failure.
+/// Keying "requires" on that empty-on-error result would silently downgrade to fail-open (Linux) when resolution hiccups.
+/// This intrinsic check stays fail-closed.
+#[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
 pub fn requires_read_deny(profile: &ProfileName, workspace: &Path) -> bool {
     match profile {
         ProfileName::Custom(name) => {
@@ -460,7 +465,7 @@ pub fn requires_read_deny(profile: &ProfileName, workspace: &Path) -> bool {
     }
 }
 /// Stub when `enforce` is unavailable; nothing is kernel-enforced.
-#[cfg(not(all(feature = "enforce", unix)))]
+#[cfg(not(all(feature = "enforce", any(target_os = "linux", target_os = "macos"))))]
 pub fn requires_read_deny(_profile: &ProfileName, _workspace: &Path) -> bool {
     false
 }
@@ -910,7 +915,7 @@ mod tests {
     }
     /// Create a temp workspace whose `.grok/sandbox.toml` contains `toml_body`.
     /// Returns the workspace path (caller removes it).
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn temp_workspace_with_sandbox_toml(tag: &str, toml_body: &str) -> PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -928,7 +933,7 @@ mod tests {
     }
     /// Create a temp workspace defining a `denytest` profile (extends `workspace`) with the given `deny` list.
     /// `deny_toml` is the raw TOML array body (e.g. `"\".env\""`).
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn temp_workspace_with_deny(tag: &str, deny_toml: &str) -> PathBuf {
         temp_workspace_with_sandbox_toml(
             tag,
@@ -936,7 +941,7 @@ mod tests {
         )
     }
     #[test]
-    #[cfg(all(feature = "enforce", unix))]
+    #[cfg(all(feature = "enforce", any(target_os = "linux", target_os = "macos")))]
     fn requires_read_deny_only_for_custom_profile_with_deny() {
         let ws = temp_workspace_with_deny("requires-deny", "\".env\"");
         assert!(requires_read_deny(

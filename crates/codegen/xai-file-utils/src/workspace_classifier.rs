@@ -146,6 +146,11 @@ fn is_platform_home_excluded(_cwd: &Path, _home: &Path) -> bool {
     false
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn is_platform_home_excluded(_cwd: &Path, _home: &Path) -> bool {
+    false
+}
+
 fn has_excluded_component(path: &Path) -> bool {
     for component in path.components() {
         if let std::path::Component::Normal(name) = component {

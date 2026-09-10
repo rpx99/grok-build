@@ -589,12 +589,15 @@ pub async fn check_update_background(update_config: &UpdateConfig) -> Background
         }
     };
 
-    let allow_downgrade = installer_allows_downgrade(installer);
+    // Restart hint is only for an upgrade. `allow_downgrade` is for the
+    // install.sh/GCS rollback path; advertising "Update: v1.0.5" while
+    // running a newer source/ports build (1.0.8) is a false prompt and
+    // would kick off a CDN download that cannot replace a pkg binary.
     if !needs_update(
         &current_version,
         &target_version,
         &update_config.channel,
-        allow_downgrade,
+        false,
     )
     .unwrap_or(false)
     {
@@ -603,9 +606,13 @@ pub async fn check_update_background(update_config: &UpdateConfig) -> Background
         return BackgroundUpdateCheck::none();
     }
 
-    // Only download when the on-disk install is behind the pointer. The running process being stale (checked above) just
-    // means "show the restart hint". The quit-for-update path's `grok update` child resolves to "Already up to date" against
-    // the same disk state. For npm a leftover symlink would wrongly suppress the download (see `disk_version_for_installer`)
+    let allow_downgrade = installer_allows_downgrade(installer);
+
+    // Only download when the on-disk install is behind the pointer
+    // The running process being stale (checked above) just means "show the restart hint"
+    // The quit-for-update path's `grok update` child resolves to "Already up to date" against the same disk state
+    // Gated on the installer maintaining the managed symlink
+    // For npm a leftover symlink would wrongly suppress the download (see `disk_version_for_installer`)
     let disk_needs_download = match disk_version_for_installer(installer) {
         Some(disk) => needs_update(
             &disk,

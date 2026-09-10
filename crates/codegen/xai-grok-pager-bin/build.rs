@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn git_stdout(args: &[&str]) -> Option<String> {
@@ -11,8 +11,19 @@ fn git_stdout(args: &[&str]) -> Option<String> {
         .map(|s| s.trim().to_string())
 }
 
+fn short_from_source_rev() -> Option<String> {
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for _ in 0..3 {
+        dir.pop();
+    }
+    let text = std::fs::read_to_string(dir.join("SOURCE_REV")).ok()?;
+    let short: String = text.trim().chars().take(12).collect();
+    (short.len() == 12).then_some(short)
+}
+
 fn main() {
     println!("cargo:rerun-if-env-changed=GROK_VERSION");
+    println!("cargo:rerun-if-changed=../../../SOURCE_REV");
 
     // Watch the git files that change on commit/checkout so the version stamp refreshes
     // Never emit a missing path: cargo treats it as always dirty and rebuilds this crate every build
@@ -26,9 +37,13 @@ fn main() {
         println!("cargo:rerun-if-changed={path}");
     }
 
-    let commit = git_stdout(&["rev-parse", "HEAD"])
-        .map(|s| s.chars().take(12).collect::<String>())
-        .filter(|s| s.len() == 12)
+    // Ports tarballs have no .git; SOURCE_REV is the xAI monorepo dump id.
+    let commit = short_from_source_rev()
+        .or_else(|| {
+            git_stdout(&["rev-parse", "HEAD"])
+                .map(|s| s.chars().take(12).collect::<String>())
+                .filter(|s| s.len() == 12)
+        })
         .unwrap_or_else(|| "unknown".to_string());
 
     let version = std::env::var("GROK_VERSION")

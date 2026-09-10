@@ -3146,7 +3146,12 @@ fn normalize_input_event(
 ) -> RoutedInputEvent {
     let TimedInputEvent { event, arrived_at } = timed;
     let is_startup_replay = arrived_at < live_input_started_at;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "openbsd",
+        target_os = "freebsd",
+        target_os = "netbsd"
+    ))]
     {
         use crossterm::event::{MouseButton, MouseEventKind};
         let is_unmodified_middle_down = match &event {

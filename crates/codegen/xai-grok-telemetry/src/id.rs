@@ -180,12 +180,31 @@ fn compute_machine_hash() -> String {
         match std::env::var("HOSTNAME") {
             Ok(hostname) if !hostname.is_empty() => {
                 let key = format!("agent_id:{hostname}");
-                mid::get(&key).unwrap_or_else(|_| uuid::Uuid::new_v4().to_string())
+                #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
+                {
+                    mid::get(&key).unwrap_or_else(|_| uuid::Uuid::new_v4().to_string())
+                }
+                #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+                {
+                    let _ = key;
+                    uuid::Uuid::new_v4().to_string()
+                }
             }
             _ => uuid::Uuid::new_v4().to_string(),
         }
+    } else if cfg!(any(target_os = "macos", target_os = "windows")) {
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
+        {
+            mid::get("agent_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string())
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        {
+            uuid::Uuid::new_v4().to_string()
+        }
     } else {
-        mid::get("agent_id").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string())
+        // Other Unix (OpenBSD etc.): `mid` is not built there; random UUID
+        // persisted to the cache file keeps the id stable.
+        uuid::Uuid::new_v4().to_string()
     }
 }
 

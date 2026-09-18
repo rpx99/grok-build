@@ -293,7 +293,6 @@ SHA256 (cargo/fallible-iterator-0.3.0.tar.gz) = KszkoQ8S3C+xSiGFidTx9i7wEbLQzEs8
 SHA256 (cargo/fallible-streaming-iterator-0.1.9.tar.gz) = c2BJHOZ2o2v5uzxWwap5FlgYOlTSdEEg8nKFc42QRlo=
 SHA256 (cargo/fancy-regex-0.11.0.tar.gz) = uV98BoDkFCKEz4siwUpHbofWGwBKOghhhysy736tQKI=
 SHA256 (cargo/fancy-regex-0.14.0.tar.gz) = biTLWpS8rh5UCLDv/KXNcXLqPFdVBJxfOvTNKDoWUpg=
-SHA256 (cargo/fancy-regex-0.16.2.tar.gz) = mYsFZVT75C4Drg4VKJXNGn4QAq7IAP3GY10gJwJgxG8=
 SHA256 (cargo/fast-float2-0.2.3.tar.gz) = +OtWTFx0I9JciG+1YdHk7mn3I1TRaRivoywIgR9ralU=
 SHA256 (cargo/fast_image_resize-6.1.0.tar.gz) = 6cUCAdwYS6ZVPaFpWqwgoELv/74thFQs7jGRfIbDqx4=
 SHA256 (cargo/fastant-0.1.10.tar.gz) = Yr9/qSjODEpDvW59EjUxj8Mqw6PeoGoiCMROcpRJRxo=
@@ -645,6 +644,8 @@ SHA256 (cargo/oboe-sys-0.6.1.tar.gz) = bIuwmkorHWaBcM/gp9W8ED+JmfsxbJgJm2qZOcny5
 SHA256 (cargo/office_oxide-0.1.9.tar.gz) = 4H4VamvGLKqmb8aY2q10Bd1i6G9Skv0iiYwaVfFUdI0=
 SHA256 (cargo/once_cell-1.21.3.tar.gz) = QvXhXJlTxeTMzusuc4KnFkgsNFFTFfewNTK4tOg5PS0=
 SHA256 (cargo/once_cell_polyfill-1.70.2.tar.gz) = OEuKttNyFfPFMBqVpKzLXWSqYH8fyyahG1MDh4RRtP4=
+SHA256 (cargo/onig-6.5.2.tar.gz) = 6fBDATY3WjFWML+vYda8pxoEglizEr518m+RD7QzPkQ=
+SHA256 (cargo/onig_sys-69.9.3.tar.gz) = HmgxdgTnflO4WJY4jhqAPB0ht0yJnsnl4REtuQc17dc=
 SHA256 (cargo/oorandom-11.1.5.tar.gz) = 1nkPWMf/Yz2HcfQpZSiSA0EaXlxoOIcDwG4U8kdwtB4=
 SHA256 (cargo/openssl-probe-0.1.6.tar.gz) = 0F4n7iE2Ef/n1jSLlC6PlCs3EUwAzAPOwlQpWkoXhS4=
 SHA256 (cargo/openssl-sys-0.9.117.tar.gz) = tH5+a7LDjNkw0lojtA+lLgaMEOhfPgOn9bparKVxNpU=
@@ -1239,7 +1240,7 @@ SHA256 (cargo/zune-jpeg-0.5.15.tar.gz) = J7ydW4FbwQPxQqoFT1YdkYfRkWkux8LR4rRzf42
 SHA256 (cargo/zvariant-5.10.0.tar.gz) = VwgpmyGQO740jpRynyLEnFXQRyCgBKo1Dx+cEi/SVAs=
 SHA256 (cargo/zvariant_derive-5.10.0.tar.gz) = W1mwEuvpxGZW+cwI2NqLTHJlEK7xJVnaPl8b9yeAdSw=
 SHA256 (cargo/zvariant_utils-3.3.0.tar.gz) = 91wjpk749A8TppiZkeZDVU2b7x1oKigRYM8MG8OJxek=
-SHA256 (grok-build-1.0.32.tar.gz) = I+sYW7LuRic17bH/0FwwBx4L7OR2dVBj7UQHqhcNjfo=
+SHA256 (grok-build-1.0.35.tar.gz) = vjKEndOMGahNUG4SqqUX+gPDDZM1hwa9uwHjwE5L4S8=
 SIZE (cargo/addr2line-0.25.1.tar.gz) = 43134
 SIZE (cargo/adler2-2.0.1.tar.gz) = 13366
 SIZE (cargo/aes-0.8.4.tar.gz) = 124812
@@ -1535,7 +1536,6 @@ SIZE (cargo/fallible-iterator-0.3.0.tar.gz) = 19639
 SIZE (cargo/fallible-streaming-iterator-0.1.9.tar.gz) = 9249
 SIZE (cargo/fancy-regex-0.11.0.tar.gz) = 82918
 SIZE (cargo/fancy-regex-0.14.0.tar.gz) = 86969
-SIZE (cargo/fancy-regex-0.16.2.tar.gz) = 100662
 SIZE (cargo/fast-float2-0.2.3.tar.gz) = 44399
 SIZE (cargo/fast_image_resize-6.1.0.tar.gz) = 155019
 SIZE (cargo/fastant-0.1.10.tar.gz) = 18634
@@ -1887,6 +1887,8 @@ SIZE (cargo/oboe-sys-0.6.1.tar.gz) = 169091
 SIZE (cargo/office_oxide-0.1.9.tar.gz) = 346622
 SIZE (cargo/once_cell-1.21.3.tar.gz) = 34534
 SIZE (cargo/once_cell_polyfill-1.70.2.tar.gz) = 7448
+SIZE (cargo/onig-6.5.2.tar.gz) = 32070
+SIZE (cargo/onig_sys-69.9.3.tar.gz) = 657340
 SIZE (cargo/oorandom-11.1.5.tar.gz) = 23750
 SIZE (cargo/openssl-probe-0.1.6.tar.gz) = 8128
 SIZE (cargo/openssl-sys-0.9.117.tar.gz) = 76045
@@ -2481,4 +2483,4 @@ SIZE (cargo/zune-jpeg-0.5.15.tar.gz) = 88879
 SIZE (cargo/zvariant-5.10.0.tar.gz) = 93150
 SIZE (cargo/zvariant_derive-5.10.0.tar.gz) = 16592
 SIZE (cargo/zvariant_utils-3.3.0.tar.gz) = 15417
-SIZE (grok-build-1.0.32.tar.gz) = 29555366
+SIZE (grok-build-1.0.35.tar.gz) = 29724585

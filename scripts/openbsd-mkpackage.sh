@@ -50,6 +50,9 @@ Umgebung:
                          Ausgabe dieser Cargo-Version. Ungesetzt = auto
                          (naechstes pN wenn Tag vVERSION-openbsd existiert)
   GROK_PORTS_BASE        Default: ~/.grok-ports
+  KEEP_BUILDS=2          so viele zuletzt gebaute Versionen behalten
+                         (WRKOBJDIR/Distfile/Paket/PLIST aelterer werden
+                         nach erfolgreichem Bau geloescht)
   DISTDIR, WRKOBJDIR, PACKAGE_REPOSITORY, PLIST_REPOSITORY
   PORTTREE, PORTSDIR, MAINTAINER, FORK_URL, UPSTREAM_URL
 
@@ -63,6 +66,53 @@ EOF
 
 ver_of() {
 	awk '/^version/ {gsub(/"/, "", $3); print $3; exit}' "$1"
+}
+
+# Alte Build-Reste loeschen und nur die KEEP_BUILDS zuletzt erfolgreich
+# gebauten Versionen behalten. Die grosse Last ist WRKOBJDIR (target/ je
+# Version mehrere GB), dazu Distfile (Cargo-Tarball) und Paket/PLIST.
+# Basis sind die vorhandenen Pakete: nur ein erfolgreicher 'package'-Lauf
+# hinterlaesst grok-build-V.tgz, unabgeschlossene Builds tauchen dort nicht
+# auf und werden hier ebenfalls entfernt.
+clean_old_builds() {
+	[ "$DRY" = 1 ] && return 0
+	KEEP=${KEEP_BUILDS:-2}
+	case $KEEP in
+	""|*[!0-9]*) echo "FEHLER: KEEP_BUILDS muss eine Zahl sein (ist: '$KEEP')"; exit 1 ;;
+	esac
+	all=$(ls -1t "$PACKAGE_REPOSITORY"/*/all/grok-build-*.tgz 2>/dev/null) || true
+	[ -n "$all" ] || return 0
+	keep=""
+	drop=""
+	for f in $all; do
+		b=${f##*/}
+		v=${b#grok-build-}
+		v=${v%.tgz}
+		case " $keep $drop " in
+		*" $v "*)	continue ;;
+		esac
+		if [ "$(printf '%s\n' $keep | grep -c .)" -lt "$KEEP" ]; then
+			keep="$keep $v"
+		else
+			drop="$drop $v"
+		fi
+	done
+	# Laufende Version nie anfassen, auch wenn KEEP_BUILDS kleiner ist.
+	case " $drop " in
+	*" $FULLPKG_VERSION "*)	drop=$(printf '%s\n' $drop | while read -r v; do
+			[ "$v" = "$FULLPKG_VERSION" ] || echo "$v"
+		done);;
+	esac
+	[ -n "$drop" ] || return 0
+	for v in $drop; do
+		echo "==> Aufraeumen: alte Version $v (behalte:$(printf ' %s' $keep))"
+		rm -rf "${WRKOBJDIR:?}/grok-build-$v"
+		cv=${v%p*}
+		rm -f "${DISTDIR:?}/grok-build-$cv.tar.gz"
+		rm -f "$PACKAGE_REPOSITORY"/*/all/"grok-build-$v.tgz"
+		rm -f "$PACKAGE_REPOSITORY"/*/ftp/"grok-build-$v.tgz"
+		rm -f "$PLIST_REPOSITORY"/*/"grok-build-$v"
+	done
 }
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null) \
@@ -113,10 +163,14 @@ else
 	fi
 fi
 if [ -z "$PKG_REVISION" ]; then
-	FULLPKG="grok-build-$V"
+	FULLPKG_VERSION="$V"
+else
+	FULLPKG_VERSION="${V}p${PKG_REVISION}"
+fi
+FULLPKG="grok-build-$FULLPKG_VERSION"
+if [ -z "$PKG_REVISION" ]; then
 	GH_TAG="v${V}-openbsd"
 else
-	FULLPKG="grok-build-${V}p${PKG_REVISION}"
 	GH_TAG="v${V}-openbsd.$((PKG_REVISION + 1))"
 fi
 
@@ -365,6 +419,39 @@ rm -rf "${WRKOBJDIR:?}/grok-build-$V"
 if [ "$DRY" != 1 ] && [ -d "$PACKAGE_REPOSITORY" ]; then
 	find "$PACKAGE_REPOSITORY" -name "$FULLPKG.tgz" -print -delete
 fi
+
+# Preflight: WANTLIB des Ports-Baums gegen die tatsaechlich installierten
+# Bibliotheken pruefen. Passt der Ports-Baum nicht zu den installierten
+# Paketen (z.B. pcre2-8 0.8 vs 0.9), faellt das sonst erst beim 'package'
+# NACH dem kompletten Build auf. Reine Metadaten-Auswertung, ~2s.
+check_wantlib() {
+	[ "$DRY" = 1 ] && return 0
+	make $MKVARS port-wantlib-args >"$LIST" 2>/dev/null \
+		|| { echo "FEHLER: make port-wantlib-args fehlgeschlagen (PORTSDIR/PORTSDIR_PATH pruefen)"; exit 1; }
+	bad=0
+	while read -r tag lib; do
+		[ "$tag" = "-W" ] || continue
+		[ -n "$lib" ] || continue
+		name=${lib%%.*}
+		ver=${lib#*.}
+		found=0
+		for d in /usr/local/lib /usr/lib /usr/X11R6/lib; do
+			if [ -e "$d/lib${name}.so.${ver}" ]; then found=1; break; fi
+		done
+		if [ "$found" = 0 ]; then
+			bad=1
+			echo "   fehlt installiert: $lib"
+		fi
+	done <"$LIST"
+	if [ "$bad" = 1 ]; then
+		echo "FEHLER: Ports-Baum ($PORTSDIR) und installierte Pakete sind nicht synchron."
+		echo "Beheben: Baum aelter als Pakete -> doas git -C $PORTSDIR pull"
+		echo "         Baum neuer als Pakete -> doas pkg_add -u"
+		exit 1
+	fi
+}
+check_wantlib
+
 run make $MKVARS package
 
 PKG=""
@@ -380,6 +467,9 @@ fi
 
 echo "==> Paket: ${PKG:-<dry-run>}"
 echo "==> GitHub-Tag: $GH_TAG"
+
+# 3e. Alte Versionen wegraeumen (Default: nur die 2 zuletzt gebauten behalten).
+clean_old_builds
 
 # 4. Optional: Stand committen und auf den eigenen Fork pushen
 if [ "$PUSH_AFTER" = 1 ] && [ "$DRY" != 1 ]; then
